@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Step Tracker Web App</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 2em; }
+    canvas { border: 1px solid #ccc; margin-top: 20px; }
+    input, button { font-size: 16px; padding: 8px 12px; margin: 5px; }
+  </style>
+</head>
+<body>
+  <h2>📍 Step Tracker Web App (Live on 64x64 Grid)</h2>
+  <p>Input steps + heading, and watch your position update on the map!</p>
+
+  <input type="number" id="steps" placeholder="Steps taken">
+  <input type="number" id="heading" placeholder="Heading (°)">
+  <button onclick="updatePosition()">Move</button>
+
+  <h3 id="info"></h3>
+
+  <canvas id="map" width="640" height="640"></canvas>
+
+  <script>
+    const canvas = document.getElementById('map');
+    const ctx = canvas.getContext('2d');
+    const scale = 10;
+    const gridSize = 64;
+
+    const target = { x: 20, y: 40 };
+    let current = { x: 0, y: 0 };
+    const stepLength = 1.0;
+
+    function drawGrid() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#eee';
+      for (let i = 0; i <= gridSize; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * scale, 0);
+        ctx.lineTo(i * scale, canvas.height);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, i * scale);
+        ctx.lineTo(canvas.width, i * scale);
+        ctx.stroke();
+      }
+    }
+
+    function drawPosition() {
+      drawGrid();
+      ctx.fillStyle = 'red';
+      ctx.fillRect(target.x * scale, target.y * scale, scale, scale);
+
+      ctx.fillStyle = 'blue';
+      ctx.beginPath();
+      ctx.arc(current.x * scale + scale / 2, current.y * scale + scale / 2, scale / 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      const dist = Math.sqrt((target.x - current.x)**2 + (target.y - current.y)**2).toFixed(2);
+      document.getElementById('info').innerText =
+        `📍 Current Position: (${current.x.toFixed(2)}, ${current.y.toFixed(2)}) | 🎯 Distance to Target: ${dist} m`;
+    }
+
+    function updatePosition() {
+      const steps = parseFloat(document.getElementById('steps').value);
+      const heading = parseFloat(document.getElementById('heading').value);
+      if (isNaN(steps) || isNaN(heading)) {
+        alert("Please enter valid numbers.");
+        return;
+      }
+
+      const rad = heading * Math.PI / 180;
+      const dx = steps * stepLength * Math.cos(rad);
+      const dy = steps * stepLength * Math.sin(rad);
+
+      current.x += dx;
+      current.y += dy;
+
+      drawPosition();
+    }
+
+    drawPosition();
+  </script>
+</body>
+</html>
