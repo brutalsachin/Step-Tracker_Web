@@ -4,17 +4,18 @@
   <title>Step Tracker Web App</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 2em; }
-    canvas { border: 1px solid #ccc; margin-top: 20px; }
-    input, button { font-size: 16px; padding: 8px 12px; margin: 5px; }
+    canvas { border: 1px solid #ccc; margin-top: 20px; display: block; margin-left: auto; margin-right: auto; }
+    input, button { font-size: 16px; padding: 8px 12px; margin: 10px; }
   </style>
 </head>
 <body>
   <h2>📍 Step Tracker Web App (Live on 64x64 Grid)</h2>
   <p>Move your phone to detect heading and steps!</p>
-
   <h3 id="sensor-info">📍 Waiting for sensor data...</h3>
 
   <canvas id="map" width="640" height="640"></canvas>
+
+  <button onclick="resetTracker()">🔄 Reset Tracker</button>
 
   <script>
     const canvas = document.getElementById('map');
@@ -24,11 +25,18 @@
 
     const target = { x: 20, y: 40 };
     let current = { x: 0, y: 0 };
-    const stepLength = 1.0;
-    let heading = 0;
+    let trail = [];
     let stepCount = 0;
+    let heading = 0;
 
-    // Draw grid
+    const stepLength = 1.0;
+    const stepThreshold = 12.5;
+    const minStepInterval = 400;
+
+    let lastStepTime = 0;
+    let lastMagnitude = 0;
+    const alpha = 0.8; // low-pass filter coefficient
+
     function drawGrid() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.strokeStyle = '#eee';
@@ -45,38 +53,75 @@
       }
     }
 
-    // Draw position
     function drawPosition() {
       drawGrid();
+
+      // Draw trail
+      ctx.fillStyle = 'rgba(0, 0, 255, 0.3)';
+      trail.forEach(pos => {
+        ctx.beginPath();
+        ctx.arc(pos.x * scale + scale / 2, pos.y * scale + scale / 2, scale / 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Target
       ctx.fillStyle = 'red';
       ctx.fillRect(target.x * scale, target.y * scale, scale, scale);
 
+      // Current Position
       ctx.fillStyle = 'blue';
       ctx.beginPath();
       ctx.arc(current.x * scale + scale / 2, current.y * scale + scale / 2, scale / 2, 0, Math.PI * 2);
       ctx.fill();
 
-      const dist = Math.sqrt((target.x - current.x)**2 + (target.y - current.y)**2).toFixed(2);
+      const dist = Math.sqrt((target.x - current.x) ** 2 + (target.y - current.y) ** 2).toFixed(2);
       document.getElementById('sensor-info').innerText =
         `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount} | Distance to Target: ${dist} m`;
     }
 
-    // Listen for device orientation (heading)
+    function resetTracker() {
+      current = { x: 0, y: 0 };
+      trail = [];
+      stepCount = 0;
+      drawPosition();
+    }
+
+    // Orientation
     window.addEventListener('deviceorientation', (event) => {
-      heading = event.alpha;
+      heading = event.alpha || 0;
       drawPosition();
     });
 
-    // Listen for device motion (steps)
+    // Step detection
     window.addEventListener('devicemotion', (event) => {
-      const acceleration = event.acceleration;
-      if (acceleration.x > 1 || acceleration.y > 1 || acceleration.z > 1) {
+      const acc = event.accelerationIncludingGravity;
+      if (!acc.x || !acc.y || !acc.z) return;
+
+      const rawMagnitude = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
+      const magnitude = alpha * lastMagnitude + (1 - alpha) * rawMagnitude;
+      lastMagnitude = magnitude;
+
+      const now = Date.now();
+      if (magnitude > stepThreshold && (now - lastStepTime > minStepInterval)) {
         stepCount++;
+        lastStepTime = now;
+
+        // Move based on heading
+        const rad = heading * Math.PI / 180;
+        current.x += stepLength * Math.cos(rad);
+        current.y += stepLength * Math.sin(rad);
+
+        // Clamp to grid
+        current.x = Math.max(0, Math.min(gridSize - 1, current.x));
+        current.y = Math.max(0, Math.min(gridSize - 1, current.y));
+
+        // Add to trail
+        trail.push({ ...current });
       }
+
       drawPosition();
     });
 
-    // Initial call to draw the position
     drawPosition();
   </script>
 </body>
