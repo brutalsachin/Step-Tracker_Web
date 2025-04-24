@@ -1,51 +1,50 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Step Tracker Web App</title>
+  <title>Grid Step Tracker</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 2em; }
-    canvas { border: 1px solid #ccc; margin-top: 20px; display: block; margin-left: auto; margin-right: auto; }
-    input, button { font-size: 16px; padding: 8px 12px; margin: 10px; }
+    canvas { border: 1px solid #ccc; margin: 20px auto; display: block; }
+    button { font-size: 16px; padding: 8px 12px; margin: 5px; }
   </style>
 </head>
 <body>
-  <h2>📍 Step Tracker Web App (Live on 64x64 Grid)</h2>
-  <p>Move your phone to detect heading and steps!</p>
-  <h3 id="sensor-info">📍 Waiting for sensor data...</h3>
+  <h2>📍 Grid Step Tracker</h2>
+  
+  <div>
+    <button onclick="setTargetMode()">Set Target</button>
+    <button onclick="resetTracker()">Reset</button>
+  </div>
 
   <canvas id="map" width="640" height="640"></canvas>
-
-  <button onclick="resetTracker()">🔄 Reset Tracker</button>
+  <h3 id="sensor-info">📍 Waiting for sensor data...</h3>
 
   <script>
     const canvas = document.getElementById('map');
     const ctx = canvas.getContext('2d');
     const scale = 10;
-    const gridSize = 64;
+    const gridSize = 64;//64 px 
 
-    const target = { x: 20, y: 40 };
+    let target = { x: 20, y: 40 };
     let current = { x: 0, y: 0 };
     let trail = [];
     let stepCount = 0;
     let heading = 0;
-
-    const stepLength = 1.0;
-    const stepThreshold = 12.5;
-    const minStepInterval = 400;
-
+    let isTargetMode = false;
     let lastStepTime = 0;
-    let lastMagnitude = 0;
-    const alpha = 0.8; // low-pass filter coefficient
 
     function drawGrid() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+     
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      
       ctx.strokeStyle = '#eee';
       for (let i = 0; i <= gridSize; i++) {
         ctx.beginPath();
         ctx.moveTo(i * scale, 0);
         ctx.lineTo(i * scale, canvas.height);
         ctx.stroke();
-
         ctx.beginPath();
         ctx.moveTo(0, i * scale);
         ctx.lineTo(canvas.width, i * scale);
@@ -55,73 +54,86 @@
 
     function drawPosition() {
       drawGrid();
-
-      // Draw trail
+      
+      // Trail
       ctx.fillStyle = 'rgba(0, 0, 255, 0.3)';
       trail.forEach(pos => {
         ctx.beginPath();
-        ctx.arc(pos.x * scale + scale / 2, pos.y * scale + scale / 2, scale / 4, 0, Math.PI * 2);
+        ctx.arc(pos.x * scale + scale/2, pos.y * scale + scale/2, scale/4, 0, Math.PI*2);
         ctx.fill();
       });
-
+      
       // Target
       ctx.fillStyle = 'red';
       ctx.fillRect(target.x * scale, target.y * scale, scale, scale);
-
-      // Current Position
+      
+      // Current position
       ctx.fillStyle = 'blue';
       ctx.beginPath();
-      ctx.arc(current.x * scale + scale / 2, current.y * scale + scale / 2, scale / 2, 0, Math.PI * 2);
+      ctx.arc(current.x * scale + scale/2, current.y * scale + scale/2, scale/2, 0, Math.PI*2);
       ctx.fill();
+      
+      updateSensorInfo();
+    }
 
-      const dist = Math.sqrt((target.x - current.x) ** 2 + (target.y - current.y) ** 2).toFixed(2);
-      document.getElementById('sensor-info').innerText =
-        `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount} | Distance to Target: ${dist} m`;
+    function setTargetMode() {
+      isTargetMode = true;
+      alert("Click on the grid to set target");
+      canvas.style.cursor = 'crosshair';
+      canvas.onclick = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        target = {
+          x: Math.floor((e.clientX - rect.left) / scale),
+          y: Math.floor((e.clientY - rect.top) / scale)
+        };
+        isTargetMode = false;
+        canvas.style.cursor = '';
+        canvas.onclick = null;
+        drawPosition();
+      };
     }
 
     function resetTracker() {
       current = { x: 0, y: 0 };
       trail = [];
       stepCount = 0;
-      drawPosition();
+      drawPosition();//ye fun reset karega sab kuch inlcuding trail
     }
 
-    // Orientation
-    window.addEventListener('deviceorientation', (event) => {
-      heading = event.alpha || 0;
-      drawPosition();
+    function updateSensorInfo() {
+      const dist = Math.sqrt((target.x - current.x)**2 + (target.y - current.y)**2).toFixed(2);//dist niaklega kitni bachi 
+      document.getElementById('sensor-info').innerText = 
+        `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount} | Distance: ${dist} units`;
+    }
+
+    //read karega motion device se input lega
+    window.addEventListener('deviceorientation', (e) => {
+      heading = e.alpha || 0;
+      updateSensorInfo();
     });
 
-    // Step detection
-    window.addEventListener('devicemotion', (event) => {
-      const acc = event.accelerationIncludingGravity;
-      if (!acc.x || !acc.y || !acc.z) return;
-
-      const rawMagnitude = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
-      const magnitude = alpha * lastMagnitude + (1 - alpha) * rawMagnitude;
-      lastMagnitude = magnitude;
-
-      const now = Date.now();
-      if (magnitude > stepThreshold && (now - lastStepTime > minStepInterval)) {
+    window.addEventListener('devicemotion', (e) => {
+      const acc = e.accelerationIncludingGravity;
+      if (!acc.x || !acc.y || !acc.z) return;//agar movemnet kisi me na hui to kuch return nhi karega 
+      
+      const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
+      if (magnitude > 15 && Date.now() - lastStepTime > 600) {//yhi responsible hai kaise stepps bad rhe hai ie pahle mg = 7 tha to bhut jldi abb 600ms bhi kr diya 
         stepCount++;
-        lastStepTime = now;
-
-        // Move based on heading
-        const rad = heading * Math.PI / 180;
-        current.x += stepLength * Math.cos(rad);
-        current.y += stepLength * Math.sin(rad);
-
-        // Clamp to grid
-        current.x = Math.max(0, Math.min(gridSize - 1, current.x));
-        current.y = Math.max(0, Math.min(gridSize - 1, current.y));
-
-        // Add to trail
+        lastStepTime = Date.now();
+        
+        const rad = heading * Math.PI / 180;//  theta  to radion coz math me radian me hi kaam hoga
+        current.x += Math.cos(rad);//basic formula
+        current.y += Math.sin(rad);
+        
+        current.x = Math.max(0, Math.min(gridSize-1, current.x));//updated current x and y both
+        current.y = Math.max(0, Math.min(gridSize-1, current.y));
+        
         trail.push({ ...current });
+        drawPosition();
       }
-
-      drawPosition();
     });
 
+    
     drawPosition();
   </script>
 </body>
