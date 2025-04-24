@@ -10,13 +10,9 @@
 </head>
 <body>
   <h2>📍 Step Tracker Web App (Live on 64x64 Grid)</h2>
-  <p>Input steps + heading, and watch your position update on the map!</p>
+  <p>Move your phone to detect heading and steps!</p>
 
-  <input type="number" id="steps" placeholder="Steps taken">
-  <input type="number" id="heading" placeholder="Heading (°)">
-  <button onclick="updatePosition()">Move</button>
-
-  <h3 id="info"></h3>
+  <h3 id="sensor-info">📍 Waiting for sensor data...</h3>
 
   <canvas id="map" width="640" height="640"></canvas>
 
@@ -29,7 +25,10 @@
     const target = { x: 20, y: 40 };
     let current = { x: 0, y: 0 };
     const stepLength = 1.0;
+    let heading = 0;
+    let stepCount = 0;
 
+    // Draw grid
     function drawGrid() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.strokeStyle = '#eee';
@@ -46,6 +45,7 @@
       }
     }
 
+    // Draw position
     function drawPosition() {
       drawGrid();
       ctx.fillStyle = 'red';
@@ -57,28 +57,26 @@
       ctx.fill();
 
       const dist = Math.sqrt((target.x - current.x)**2 + (target.y - current.y)**2).toFixed(2);
-      document.getElementById('info').innerText =
-        `📍 Current Position: (${current.x.toFixed(2)}, ${current.y.toFixed(2)}) | 🎯 Distance to Target: ${dist} m`;
+      document.getElementById('sensor-info').innerText =
+        `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount} | Distance to Target: ${dist} m`;
     }
 
-    function updatePosition() {
-      const steps = parseFloat(document.getElementById('steps').value);
-      const heading = parseFloat(document.getElementById('heading').value);
-      if (isNaN(steps) || isNaN(heading)) {
-        alert("Please enter valid numbers.");
-        return;
-      }
-
-      const rad = heading * Math.PI / 180;
-      const dx = steps * stepLength * Math.cos(rad);
-      const dy = steps * stepLength * Math.sin(rad);
-
-      current.x += dx;
-      current.y += dy;
-
+    // Listen for device orientation (heading)
+    window.addEventListener('deviceorientation', (event) => {
+      heading = event.alpha;
       drawPosition();
-    }
+    });
 
+    // Listen for device motion (steps)
+    window.addEventListener('devicemotion', (event) => {
+      const acceleration = event.acceleration;
+      if (acceleration.x > 1 || acceleration.y > 1 || acceleration.z > 1) {
+        stepCount++;
+      }
+      drawPosition();
+    });
+
+    // Initial call to draw the position
     drawPosition();
   </script>
 </body>
