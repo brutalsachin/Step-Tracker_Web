@@ -10,7 +10,6 @@
 </head>
 <body>
   <h2>📍 Grid Step Tracker</h2>
-  
   <div>
     <button onclick="setTargetMode()">Set Target</button>
     <button onclick="resetTracker()">Reset</button>
@@ -23,7 +22,7 @@
     const canvas = document.getElementById('map');
     const ctx = canvas.getContext('2d');
     const scale = 10;
-    const gridSize = 64;//64 px 
+    const gridSize = 64;
 
     let target = { x: 20, y: 40 };
     let current = { x: 0, y: 0 };
@@ -31,14 +30,10 @@
     let stepCount = 0;
     let heading = 0;
     let isTargetMode = false;
-    let lastStepTime = 0;
 
     function drawGrid() {
-     
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      
       ctx.strokeStyle = '#eee';
       for (let i = 0; i <= gridSize; i++) {
         ctx.beginPath();
@@ -54,25 +49,18 @@
 
     function drawPosition() {
       drawGrid();
-      
-      // Trail
       ctx.fillStyle = 'rgba(0, 0, 255, 0.3)';
       trail.forEach(pos => {
         ctx.beginPath();
         ctx.arc(pos.x * scale + scale/2, pos.y * scale + scale/2, scale/4, 0, Math.PI*2);
         ctx.fill();
       });
-      
-      // Target
       ctx.fillStyle = 'red';
       ctx.fillRect(target.x * scale, target.y * scale, scale, scale);
-      
-      // Current position
       ctx.fillStyle = 'blue';
       ctx.beginPath();
       ctx.arc(current.x * scale + scale/2, current.y * scale + scale/2, scale/2, 0, Math.PI*2);
       ctx.fill();
-      
       updateSensorInfo();
     }
 
@@ -97,43 +85,77 @@
       current = { x: 0, y: 0 };
       trail = [];
       stepCount = 0;
-      drawPosition();//ye fun reset karega sab kuch inlcuding trail
+      drawPosition();
     }
 
     function updateSensorInfo() {
-      const dist = Math.sqrt((target.x - current.x)**2 + (target.y - current.y)**2).toFixed(2);//dist niaklega kitni bachi 
+      const dist = Math.sqrt((target.x - current.x)**2 + (target.y - current.y)**2).toFixed(2);
       document.getElementById('sensor-info').innerText = 
         `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount} | Distance: ${dist} units`;
     }
 
-    //read karega motion device se input lega
-    window.addEventListener('deviceorientation', (e) => {
+    const config = {
+      motion: {
+        stepThreshold: 12,
+        stepMinInterval: 300,
+        stepBaseLength: 1
+      }
+    };
+
+    let state = {
+      quaternion: [1, 0, 0, 0],
+      stepPhase: 0,
+      lastStepTime: 0
+    };
+
+    function updateOrientation(gyro) {
+      const q = state.quaternion;
+      const dt = 0.01;
+      const gx = gyro.alpha * Math.PI/180 * dt;
+      const gy = gyro.beta * Math.PI/180 * dt;
+      const gz = gyro.gamma * Math.PI/180 * dt;
+      state.quaternion = [
+        q[0] + (-q[1]*gx - q[2]*gy - q[3]*gz) * 0.5,
+        q[1] + (q[0]*gx + q[2]*gz - q[3]*gy) * 0.5,
+        q[2] + (q[0]*gy - q[1]*gz + q[3]*gx) * 0.5,
+        q[3] + (q[0]*gz + q[1]*gy - q[2]*gx) * 0.5
+      ];
+    }
+
+    function detectStep(accel) {
+      const magnitude = Math.sqrt(accel.x**2 + accel.y**2 + accel.z**2);
+      const now = Date.now();
+      if (magnitude > config.motion.stepThreshold && now - state.lastStepTime > config.motion.stepMinInterval) {
+        state.lastStepTime = now;
+        return true;
+      }
+      return false;
+    }
+
+    function updatePosition() {
+      const q = state.quaternion;
+      const yaw = Math.atan2(2*q[1]*q[2] - 2*q[0]*q[3], q[0]*q[0] + q[1]*q[1] - q[2]*q[2] - q[3]*q[3]);
+      current.x += Math.cos(yaw);
+      current.y += Math.sin(yaw);
+      current.x = Math.max(0, Math.min(gridSize - 1, current.x));
+      current.y = Math.max(0, Math.min(gridSize - 1, current.y));
+      trail.push({ ...current });
+      stepCount++;
+      drawPosition();
+    }
+
+    window.addEventListener('devicemotion', e => {
+      const accel = e.accelerationIncludingGravity;
+      const gyro = e.rotationRate;
+      if (gyro) updateOrientation(gyro);
+      if (detectStep(accel)) updatePosition();
+    });
+
+    window.addEventListener('deviceorientation', e => {
       heading = e.alpha || 0;
       updateSensorInfo();
     });
 
-    window.addEventListener('devicemotion', (e) => {
-      const acc = e.accelerationIncludingGravity;
-      if (!acc.x || !acc.y || !acc.z) return;//agar movemnet kisi me na hui to kuch return nhi karega 
-      
-      const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
-      if (magnitude > 15 && Date.now() - lastStepTime > 600) {//yhi responsible hai kaise stepps bad rhe hai ie pahle mg = 7 tha to bhut jldi abb 600ms bhi kr diya 
-        stepCount++;
-        lastStepTime = Date.now();
-        
-        const rad = heading * Math.PI / 180;//  theta  to radion coz math me radian me hi kaam hoga
-        current.x += Math.cos(rad);//basic formula
-        current.y += Math.sin(rad);
-        
-        current.x = Math.max(0, Math.min(gridSize-1, current.x));//updated current x and y both
-        current.y = Math.max(0, Math.min(gridSize-1, current.y));
-        
-        trail.push({ ...current });
-        drawPosition();
-      }
-    });
-
-    
     drawPosition();
   </script>
 </body>
