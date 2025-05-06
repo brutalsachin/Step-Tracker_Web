@@ -1,238 +1,128 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Step Tracker App</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-
-        #container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        #controls {
-            margin: 10px;
-            text-align: center;
-        }
-
-        canvas {
-            border: 1px solid #ccc;
-            margin-bottom: 20px;
-        }
-
-        @media (min-width: 600px) {
-            #container { 
-                flex-direction: row; 
-            }
-        }
-
-        @keyframes celebrate {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.5); }
-            100% { transform: scale(1); }
-        }
-
-        #userDot.goal {
-            animation: celebrate 1s ease-in-out infinite;
-            box-shadow: 0 0 8px gold;
-        }
-    </style>
+  <title>Step Tracker Web App</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 2em; }
+    canvas { border: 1px solid #ccc; margin-top: 20px; display: block; margin-left: auto; margin-right: auto; }
+    input, button { font-size: 16px; padding: 8px 12px; margin: 10px; }
+  </style>
 </head>
 <body>
-    <div id="container">
-        <div id="controls">
-            <label for="age">Enter your age: </label>
-            <input type="number" id="age" min="1" max="120" required><br><br>
-            <label for="startX">Start (X): </label>
-            <input type="number" id="startX" min="0" max="9">
-            <label for="startY">Start (Y): </label>
-            <input type="number" id="startY" min="0" max="9"><br><br>
-            <label for="destX">Destination (X): </label>
-            <input type="number" id="destX" min="0" max="9">
-            <label for="destY">Destination (Y): </label>
-            <input type="number" id="destY" min="0" max="9"><br><br>
-            <button id="setDest">Set Destination</button>
-            <button id="resetPath">Reset Path</button>
-            <button id="redefineDest">Redefine Destination</button>
-        </div>
+  <h2>📍 Step Tracker Web App - Only for Demo (Live on 64x64 Grid)</h2>
+  <p>Move your phone to detect heading and steps!</p>
+  <h3 id="sensor-info">📍 Waiting for sensor data...</h3>
 
-        <canvas id="gridCanvas" width="640" height="640"></canvas>
-    </div>
+  <canvas id="map" width="640" height="640"></canvas>
 
-    <script>
-        let age = parseInt(prompt("Enter your age:"));
-        let strideLength;
+  <button onclick="resetTracker()">🔄 Reset Tracker</button>
 
-        if (age < 40) strideLength = 0.75;
-        else if (age < 60) strideLength = 0.65;
-        else strideLength = 0.55;
+  <script>
+    const canvas = document.getElementById('map');
+    const ctx = canvas.getContext('2d');
+    const scale = 10;
+    const gridSize = 64;
 
-        const canvas = document.getElementById('gridCanvas');
-        const ctx = canvas.getContext('2d');
-        const cellSize = 64;
-        const cols = 10, rows = 10;
+    const target = { x: 20, y: 40 };
+    let current = { x: 0, y: 0 };
+    let trail = [];
+    let stepCount = 0;
+    let heading = 0;
 
-        let currentCol = 0, currentRow = 0;
-        let destCol = 5, destRow = 5;
-        let path = JSON.parse(localStorage.getItem('path')) || []; // Load saved path from localStorage
-        let model;
-        let isStepDetected = false;
+    const stepLength = 1.0;
+    const stepThreshold = 12.5;
+    const minStepInterval = 400;
 
-        let stepData = [];
-        let labels = [];
-        let windowSize = 5;
+    let lastStepTime = 0;
+    let lastMagnitude = 0;
+    const alpha = 0.8; // low-pass filter coefficient
 
-        // Train a simple model
-        async function trainModel() {
-            model = tf.sequential();
-            model.add(tf.layers.dense({units: 32, activation: 'relu', inputShape: [windowSize * 3]}));
-            model.add(tf.layers.dense({units: 16, activation: 'relu'}));
-            model.add(tf.layers.dense({units: 1, activation: 'sigmoid'}));
-            model.compile({optimizer: 'adam', loss: 'binaryCrossentropy'});
+    function drawGrid() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#eee';
+      for (let i = 0; i <= gridSize; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * scale, 0);
+        ctx.lineTo(i * scale, canvas.height);
+        ctx.stroke();
 
-            await model.fit(tf.tensor2d(stepData), tf.tensor2d(labels, [labels.length, 1]), {
-                epochs: 10,
-                batchSize: 32
-            });
-        }
+        ctx.beginPath();
+        ctx.moveTo(0, i * scale);
+        ctx.lineTo(canvas.width, i * scale);
+        ctx.stroke();
+      }
+    }
 
-        function drawGrid() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function drawPosition() {
+      drawGrid();
 
-            ctx.strokeStyle = '#ccc';
-            ctx.lineWidth = 1;
+      // Draw trail
+      ctx.fillStyle = 'rgba(0, 0, 255, 0.3)';
+      trail.forEach(pos => {
+        ctx.beginPath();
+        ctx.arc(pos.x * scale + scale / 2, pos.y * scale + scale / 2, scale / 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
 
-            for (let i = 0; i <= cols; i++) {
-                ctx.beginPath();
-                ctx.moveTo(i * cellSize, 0);
-                ctx.lineTo(i * cellSize, rows * cellSize);
-                ctx.stroke();
-            }
+      // Target
+      ctx.fillStyle = 'red';
+      ctx.fillRect(target.x * scale, target.y * scale, scale, scale);
 
-            for (let j = 0; j <= rows; j++) {
-                ctx.beginPath();
-                ctx.moveTo(0, j * cellSize);
-                ctx.lineTo(cols * cellSize, j * cellSize);
-                ctx.stroke();
-            }
-        }
+      // Current Position
+      ctx.fillStyle = 'blue';
+      ctx.beginPath();
+      ctx.arc(current.x * scale + scale / 2, current.y * scale + scale / 2, scale / 2, 0, Math.PI * 2);
+      ctx.fill();
 
-        function drawUser() {
-            const x = currentCol * cellSize + cellSize / 2;
-            const y = currentRow * cellSize + cellSize / 2;
-            ctx.beginPath();
-            ctx.arc(x, y, 12, 0, 2 * Math.PI);
-            ctx.fillStyle = 'red';
-            ctx.fill();
-        }
+      const dist = Math.sqrt((target.x - current.x) ** 2 + (target.y - current.y) ** 2).toFixed(2);
+      document.getElementById('sensor-info').innerText =
+        `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount} | Distance to Target: ${dist} m`;
+    }
 
-        function drawTarget() {
-            const x = destCol * cellSize + cellSize / 2;
-            const y = destRow * cellSize + cellSize / 2;
-            ctx.fillStyle = 'green';
-            ctx.fillRect(x - 15, y - 15, 30, 30);
-        }
+    function resetTracker() {
+      current = { x: 0, y: 0 };
+      trail = [];
+      stepCount = 0;
+      drawPosition();
+    }
 
-        function drawArrow() {
-            const angle = Math.atan2(destRow - currentRow, destCol - currentCol);
-            ctx.save();
-            const x = currentCol * cellSize + cellSize / 2;
-            const y = currentRow * cellSize + cellSize / 2;
-            ctx.translate(x, y);
-            ctx.rotate(angle);
-            ctx.beginPath();
-            ctx.moveTo(0, -10); ctx.lineTo(0, 10);
-            ctx.lineTo(20, 0);
-            ctx.closePath();
-            ctx.fillStyle = 'yellow';
-            ctx.fill();
-            ctx.restore();
-        }
+    // Orientation
+    window.addEventListener('deviceorientation', (event) => {
+      heading = event.alpha || 0;
+      drawPosition();
+    });
 
-        function update() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawGrid();
-            drawTarget();
-            drawUser();
-            drawArrow();
-        }
+    // Step detection
+    window.addEventListener('devicemotion', (event) => {
+      const acc = event.accelerationIncludingGravity;
+      if (!acc.x || !acc.y || !acc.z) return;
 
-        function handleMotion(event) {
-            let ax = event.acceleration.x;
-            let ay = event.acceleration.y;
-            let az = event.acceleration.z;
+      const rawMagnitude = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
+      const magnitude = alpha * lastMagnitude + (1 - alpha) * rawMagnitude;
+      lastMagnitude = magnitude;
 
-            stepData.push([ax, ay, az]);
-            if (stepData.length > windowSize) {
-                stepData.shift();
-            }
+      const now = Date.now();
+      if (magnitude > stepThreshold && (now - lastStepTime > minStepInterval)) {
+        stepCount++;
+        lastStepTime = now;
 
-            if (stepData.length === windowSize) {
-                let input = tf.tensor2d([stepData.flat()]);
-                model.predict(input).array().then(predictions => {
-                    if (predictions[0] > 0.5) {
-                        isStepDetected = true;
-                    }
+        // Move based on heading
+        const rad = heading * Math.PI / 180;
+        current.x += stepLength * Math.cos(rad);
+        current.y += stepLength * Math.sin(rad);
 
-                    if (isStepDetected) {
-                        moveUserOneCell();
-                        isStepDetected = false;
-                    }
-                });
-            }
-        }
+        // Clamp to grid
+        current.x = Math.max(0, Math.min(gridSize - 1, current.x));
+        current.y = Math.max(0, Math.min(gridSize - 1, current.y));
 
-        function moveUserOneCell() {
-            if (currentCol < destCol) currentCol++;
-            else if (currentCol > destCol) currentCol--;
+        // Add to trail
+        trail.push({ ...current });
+      }
 
-            if (currentRow < destRow) currentRow++;
-            else if (currentRow > destRow) currentRow--;
+      drawPosition();
+    });
 
-            path.push({x: currentCol, y: currentRow});
-            localStorage.setItem('path', JSON.stringify(path));  // Save path to localStorage
-            update();
-            if (currentCol === destCol && currentRow === destRow) {
-                document.querySelector('#userDot').classList.add('goal');
-            }
-        }
-
-        function setDestination() {
-            destCol = parseInt(document.getElementById('destX').value);
-            destRow = parseInt(document.getElementById('destY').value);
-            currentCol = parseInt(document.getElementById('startX').value);
-            currentRow = parseInt(document.getElementById('startY').value);
-            path = [];
-            update();
-        }
-
-        function resetPath() {
-            path = [];
-            localStorage.setItem('path', JSON.stringify(path));  // Clear path from localStorage
-            update();
-        }
-
-        document.getElementById('setDest').addEventListener('click', setDestination);
-        document.getElementById('resetPath').addEventListener('click', resetPath);
-
-        if (window.DeviceMotionEvent) {
-            window.addEventListener('devicemotion', handleMotion);
-        }
-
-        trainModel(); // Train the model after gathering some data
-
-        update();
-    </script>
+    drawPosition();
+  </script>
 </body>
 </html>
