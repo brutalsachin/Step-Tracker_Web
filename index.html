@@ -1,25 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Step Tracker Web App</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Step Tracker with Direction Arrow</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 2em; }
-    canvas { border: 1px solid #ccc; margin-top: 20px; display: block; margin-left: auto; margin-right: auto; }
-    input, button { font-size: 16px; padding: 8px 12px; margin: 10px; }
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2em;
+    }
+
+    canvas {
+      border: 1px solid #ccc;
+      margin-top: 20px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    input,
+    button {
+      font-size: 16px;
+      padding: 8px 12px;
+      margin: 10px;
+    }
+
+    #arrow {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background-image: url('https://tse3.mm.bing.net/th?id=OIP.SuilJAyB1OaLXSQjKrq3vgHaHa&pid=Api&P=0&h=180');
+      background-size: cover;
+      background-repeat: no-repeat;
+      pointer-events: none;
+      transform-origin: center;
+    }
+
+    #canvas-container {
+      position: relative;
+      display: inline-block;
+    }
+
+    #video {
+      width: 640px;
+      height: 480px;
+      display: block;
+      margin: 0 auto;
+    }
+
+    #map {
+      display: none; /* Initially hide the map */
+    }
+
+    #sensor-info {
+      margin-top: 10px;
+    }
+
+    #message {
+      margin-top: 20px;
+      font-size: 18px;
+      color: #888;
+    }
   </style>
 </head>
 <body>
-  <h2>📍 Step Tracker Web App - Only for Demo (Live on 64x64 Grid)</h2>
+  <h2>📍 Step Tracker with Direction Arrow</h2>
   <p>Move your phone to detect heading and steps!</p>
   <h3 id="sensor-info">📍 Waiting for sensor data...</h3>
 
-  <canvas id="map" width="640" height="640"></canvas>
+  <div id="message">
+    <p>📸 Please open the rear camera to view the direction arrow in real-time.</p>
+  </div>
 
-  <button onclick="resetTracker()">🔄 Reset Tracker</button>
+  <div id="canvas-container">
+    <video id="video" autoplay></video> <!-- Video feed element -->
+    <canvas id="map" width="640" height="480"></canvas> <!-- Map element (initially hidden) -->
+    <div id="arrow"></div> <!-- Arrow element -->
+  </div>
+
+  <button onclick="showMap()">🔄 Show Map & Arrow</button>
 
   <script>
     const canvas = document.getElementById('map');
     const ctx = canvas.getContext('2d');
+    const arrow = document.getElementById('arrow');
+    const video = document.getElementById('video');
     const scale = 10;
     const gridSize = 64;
 
@@ -35,7 +101,7 @@
 
     let lastStepTime = 0;
     let lastMagnitude = 0;
-    const alpha = 0.8; // low-pass filter coefficient
+    const alpha = 0.8; // Low-pass filter
 
     function drawGrid() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -64,19 +130,55 @@
         ctx.fill();
       });
 
-      // Target
+      // Target (red square)
       ctx.fillStyle = 'red';
       ctx.fillRect(target.x * scale, target.y * scale, scale, scale);
 
-      // Current Position
+      // Current Position (blue dot)
       ctx.fillStyle = 'blue';
       ctx.beginPath();
       ctx.arc(current.x * scale + scale / 2, current.y * scale + scale / 2, scale / 2, 0, Math.PI * 2);
       ctx.fill();
 
-      const dist = Math.sqrt((target.x - current.x) ** 2 + (target.y - current.y) ** 2).toFixed(2);
+      // Calculate angle to target (for arrow direction)
+      const dx = target.x - current.x;
+      const dy = target.y - current.y;
+      const targetAngle = Math.atan2(dy, dx) * (180 / Math.PI); // [-180° to 180°]
+
+      // Update arrow position and rotation
+      updateArrow(targetAngle);
+
+      // Display stats
+      const dist = Math.sqrt(dx ** 2 + dy ** 2).toFixed(2);
       document.getElementById('sensor-info').innerText =
-        `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount} | Distance to Target: ${dist} m`;
+        `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount} | Distance to Target: ${dist} m | Turn: ${getTurnDirection(heading, targetAngle)}`;
+    }
+
+    // Update arrow direction and position
+    function updateArrow(targetAngle) {
+      const canvasRect = canvas.getBoundingClientRect();
+      const arrowSize = 30;
+
+      // Position arrow on current location (center of the blue dot)
+      const arrowX = canvasRect.left + (current.x * scale + scale / 2) - arrowSize / 2;
+      const arrowY = canvasRect.top + (current.y * scale + scale / 2) - arrowSize / 2;
+
+      arrow.style.left = `${arrowX}px`;
+      arrow.style.top = `${arrowY}px`;
+
+      // Rotate arrow to point toward target (adjust for screen coordinates)
+      const arrowRotation = targetAngle - 90; // Adjust because image points up by default
+      arrow.style.transform = `rotate(${arrowRotation}deg)`;
+    }
+
+    function getTurnDirection(userHeading, targetAngle) {
+      userHeading = (userHeading + 360) % 360;
+      targetAngle = (targetAngle + 360) % 360;
+
+      const diff = (targetAngle - userHeading + 360) % 360;
+      if (diff > 180) return "Left";
+      else if (diff < 180) return "Right";
+      else return "Forward";
     }
 
     function resetTracker() {
@@ -86,13 +188,23 @@
       drawPosition();
     }
 
-    // Orientation
+    function updatePosition() {
+      const rad = heading * Math.PI / 180;
+      current.x += stepLength * Math.cos(rad);
+      current.y += stepLength * Math.sin(rad);
+
+      current.x = Math.max(0, Math.min(gridSize - 1, current.x));
+      current.y = Math.max(0, Math.min(gridSize - 1, current.y));
+
+      trail.push({ ...current });
+      drawPosition();
+    }
+
     window.addEventListener('deviceorientation', (event) => {
-      heading = event.alpha || 0;
+      heading = event.alpha || 0; // 0°-360°
       drawPosition();
     });
 
-    // Step detection
     window.addEventListener('devicemotion', (event) => {
       const acc = event.accelerationIncludingGravity;
       if (!acc.x || !acc.y || !acc.z) return;
@@ -105,23 +217,27 @@
       if (magnitude > stepThreshold && (now - lastStepTime > minStepInterval)) {
         stepCount++;
         lastStepTime = now;
-
-        // Move based on heading
-        const rad = heading * Math.PI / 180;
-        current.x += stepLength * Math.cos(rad);
-        current.y += stepLength * Math.sin(rad);
-
-        // Clamp to grid
-        current.x = Math.max(0, Math.min(gridSize - 1, current.x));
-        current.y = Math.max(0, Math.min(gridSize - 1, current.y));
-
-        // Add to trail
-        trail.push({ ...current });
+        updatePosition();
       }
-
-      drawPosition();
     });
 
+    // Initialize the camera feed
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then(function(stream) {
+        video.srcObject = stream;
+      })
+      .catch(function(error) {
+        console.error("Error accessing camera: ", error);
+      });
+
+    // Function to show the map and overlay arrow
+    function showMap() {
+      // Show the map (canvas) and hide the initial message
+      document.getElementById('map').style.display = 'block';
+      document.getElementById('message').style.display = 'none';
+    }
+
+    // Initialize with map hidden
     drawPosition();
   </script>
 </body>
