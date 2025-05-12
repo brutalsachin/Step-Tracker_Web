@@ -1,172 +1,402 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Navigation with 3D Arrow</title>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            height: 100%;
-            font-family: Arial, sans-serif;
-        }
-        #mapContainer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-        }
-        #videoContainer {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 50%;
-            height: 100%;
-            z-index: 2;
-            overflow: hidden;
-        }
-        #controls {
-            position: absolute;
-            top: 10px;
-            left: 60%;
-            z-index: 3;
-            font-size: 16px;
-        }
-        .btn {
-            padding: 10px;
-            margin: 5px;
-            background-color: #333;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        .btn:hover {
-            background-color: #555;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AR Step Tracker with 3D Navigation</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 1em;
+      margin: 0;
+      overflow-x: hidden;
+      background: #000;
+      color: white;
+    }
+    
+    /* AR View Styles */
+    #ar-container {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      margin: 0 auto;
+      height: 60vh;
+      perspective: 1000px;
+    }
+    
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      display: block;
+    }
+    
+    #arrow-3d {
+      position: absolute;
+      width: 80px;
+      height: 120px;
+      left: 50%;
+      top: 50%;
+      transform-style: preserve-3d;
+      transform: translate(-50%, -50%);
+      transition: transform 0.3s ease-out;
+      z-index: 10;
+    }
+    
+    .arrow-part {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom, #ff0000, #cc0000);
+      clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+      opacity: 0.9;
+      border-radius: 10px;
+      transform-origin: bottom center;
+    }
+    
+    .arrow-shadow {
+      position: absolute;
+      width: 60px;
+      height: 20px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 50%;
+      bottom: -10px;
+      left: 50%;
+      transform: translateX(-50%) rotateX(90deg);
+      filter: blur(5px);
+    }
+    
+    /* Map View Styles */
+    #map-container {
+      display: none;
+      position: relative;
+      margin: 20px auto;
+    }
+    
+    #map {
+      border: 1px solid #ccc;
+      display: block;
+      margin: 0 auto;
+      background: #f0f0f0;
+    }
+    
+    #map-arrow {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="blue" d="M12 2L4 12l8 10 8-10z"/></svg>');
+      background-size: contain;
+      pointer-events: none;
+      transform-origin: center;
+    }
+    
+    /* Control Styles */
+    #controls {
+      margin: 20px auto;
+      padding: 15px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 10px;
+      max-width: 500px;
+    }
+    
+    button {
+      background: #4285f4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin: 5px;
+      border-radius: 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    
+    #sensor-info {
+      margin: 15px 0;
+      font-size: 16px;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 10px;
+    }
+    
+    .view-toggle {
+      background: #ff9800;
+    }
+  </style>
 </head>
 <body>
-    <!-- Live Video Feed -->
-    <div id="videoContainer">
-        <video id="video" autoplay></video>
+  <h2>AR Step Tracker with 3D Navigation</h2>
+  
+  <div id="ar-container">
+    <video id="video" autoplay playsinline></video>
+    <div id="arrow-3d">
+      <div class="arrow-part"></div>
+      <div class="arrow-shadow"></div>
     </div>
+  </div>
+  
+  <div id="map-container">
+    <canvas id="map" width="640" height="480"></canvas>
+    <div id="map-arrow"></div>
+  </div>
+  
+  <div id="controls">
+    <div id="sensor-info">Initializing sensors...</div>
+    <button class="view-toggle" onclick="toggleView()">🗺️ Show Map</button>
+    <button onclick="resetTracker()">🔄 Reset Position</button>
+    <button onclick="setRandomTarget()">🎯 New Target</button>
+  </div>
 
-    <!-- Leaflet Map Container -->
-    <div id="mapContainer"></div>
-
-    <!-- Controls -->
-    <div id="controls">
-        <button class="btn" id="resetBtn">RESET</button>
-        <button class="btn" id="showHideMapBtn">SHOW MAP</button>
-        <p id="direction">Heading: 0°</p>
-        <p id="steps">Steps: 0</p>
-        <p id="orientation">Orientation: North</p>
-    </div>
-
-    <!-- Three.js Setup -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
-    <script>
-        let video = document.getElementById('video');
-        let showHideMapBtn = document.getElementById('showHideMapBtn');
-        let mapVisible = false;
-        let videoStream;
-        let arrow;
-        let scene, camera, renderer, arrowObject;
-
-        // Set up Leaflet Map
-        let map = L.map('mapContainer').setView([26.4500, 80.1930], 18); // PSIT Kanpur Coordinates
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-        // Restrict zoom level for PSIT campus map
-        map.setMaxZoom(18);
-
-        // Set up video stream (rear camera)
-        async function initCamera() {
-            try {
-                videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                video.srcObject = videoStream;
-            } catch (err) {
-                console.error('Error accessing camera: ', err);
-            }
+  <script>
+    // DOM Elements
+    const video = document.getElementById('video');
+    const arrow3d = document.getElementById('arrow-3d');
+    const arrowPart = document.querySelector('.arrow-part');
+    const map = document.getElementById('map');
+    const ctx = map.getContext('2d');
+    const mapArrow = document.getElementById('map-arrow');
+    
+    // Tracking Variables
+    const scale = 10;
+    const gridSize = 64;
+    let targetPosition = { x: 20, y: 40 }; // Grid coordinates
+    let currentPosition = { x: 0, y: 0 };
+    let trail = [];
+    let stepCount = 0;
+    
+    // Sensor Data
+    let heading = 0;
+    let pitch = 0;
+    
+    // Step Detection
+    const stepLength = 1.0;
+    const stepThreshold = 12.5;
+    const minStepInterval = 400;
+    let lastStepTime = 0;
+    let lastMagnitude = 0;
+    const alpha = 0.8;
+    
+    // Initialize App
+    function initApp() {
+      // Start camera
+      initCamera();
+      
+      // Start sensors
+      if (window.DeviceOrientationEvent) {
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
+      
+      if (window.DeviceMotionEvent) {
+        window.addEventListener('devicemotion', handleMotion);
+      }
+      
+      // Draw initial map
+      drawMap();
+    }
+    
+    // Camera Initialization
+    function initCamera() {
+      navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         }
-
-        // Set up Three.js scene and 3D arrow
-        function init3DArrow() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer();
-            renderer.setSize(window.innerWidth / 2, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            // Arrow Geometry and Material
-            const arrowGeometry = new THREE.ConeGeometry(0.5, 2, 8);
-            const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-            arrowObject = new THREE.Mesh(arrowGeometry, arrowMaterial);
-            arrowObject.rotation.x = Math.PI / 2; // Rotate to point the arrow upwards
-            scene.add(arrowObject);
-
-            camera.position.z = 5;
-        }
-
-        // Update arrow orientation
-        function updateArrowOrientation(heading) {
-            arrowObject.rotation.y = THREE.MathUtils.degToRad(heading);
-        }
-
-        // Rotate arrow every frame based on heading
-        function animate() {
-            requestAnimationFrame(animate);
-            renderer.render(scene, camera);
-        }
-
-        // Handle device orientation
-        window.addEventListener('deviceorientation', function(event) {
-            let heading = event.alpha || 0; // Heading in degrees
-            document.getElementById('direction').innerText = `Heading: ${heading.toFixed(2)}°`;
-            updateArrowOrientation(heading);
-        });
-
-        // Handle step counting (Example logic)
-        let steps = 0;
-        window.addEventListener('devicemotion', function(event) {
-            if (event.accelerationIncludingGravity) {
-                let acc = event.accelerationIncludingGravity;
-                let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-                if (magnitude > 12) { // Simple threshold to count steps
-                    steps++;
-                    document.getElementById('steps').innerText = `Steps: ${steps}`;
-                }
-            }
-        });
-
-        // Button to show/hide map
-        showHideMapBtn.addEventListener('click', function() {
-            mapVisible = !mapVisible;
-            if (mapVisible) {
-                mapContainer.style.display = 'block';
-                showHideMapBtn.innerText = 'HIDE MAP';
-            } else {
-                mapContainer.style.display = 'none';
-                showHideMapBtn.innerText = 'SHOW MAP';
-            }
-        });
-
-        // Button to reset tracker
-        document.getElementById('resetBtn').addEventListener('click', function() {
-            steps = 0;
-            document.getElementById('steps').innerText = `Steps: ${steps}`;
-        });
-
-        // Initialize everything
-        initCamera();
-        init3DArrow();
-        animate();
-    </script>
+      }).then(stream => {
+        video.srcObject = stream;
+      }).catch(err => {
+        console.error("Camera error:", err);
+      });
+    }
+    
+    // Sensor Handlers
+    function handleOrientation(event) {
+      heading = event.alpha || 0;
+      pitch = event.beta || 0;
+      
+      // Normalize values
+      heading = (heading + 360) % 360;
+      pitch = Math.max(-90, Math.min(90, pitch));
+      
+      updateArArrow();
+      updateMapArrow();
+    }
+    
+    function handleMotion(event) {
+      const acc = event.accelerationIncludingGravity;
+      if (!acc.x || !acc.y || !acc.z) return;
+      
+      // Low-pass filter
+      const magnitude = alpha * lastMagnitude + (1 - alpha) * 
+        Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
+      lastMagnitude = magnitude;
+      
+      const now = Date.now();
+      if (magnitude > stepThreshold && (now - lastStepTime > minStepInterval)) {
+        stepCount++;
+        lastStepTime = now;
+        
+        // Update position based on heading
+        const rad = heading * Math.PI / 180;
+        currentPosition.x += stepLength * Math.sin(rad);
+        currentPosition.y += stepLength * Math.cos(rad);
+        
+        // Keep within grid bounds
+        currentPosition.x = Math.max(0, Math.min(gridSize - 1, currentPosition.x));
+        currentPosition.y = Math.max(0, Math.min(gridSize - 1, currentPosition.y));
+        
+        trail.push({ ...currentPosition });
+        updateArArrow();
+        drawMap();
+      }
+    }
+    
+    // AR Arrow Update
+    function updateArArrow() {
+      const dx = targetPosition.x - currentPosition.x;
+      const dy = targetPosition.y - currentPosition.y;
+      const distance = Math.sqrt(dx**2 + dy**2);
+      
+      // Calculate target angle
+      const targetAngle = (Math.atan2(dx, dy) * 180/Math.PI + 360) % 360;
+      
+      // Relative angle between heading and target
+      let angleDiff = (targetAngle - heading + 360) % 360;
+      if (angleDiff > 180) angleDiff -= 360;
+      
+      // Calculate arrow tilt based on distance
+      const arrowTilt = Math.min(30, (1/distance) * 500);
+      
+      // 3D Transform
+      arrow3d.style.transform = `
+        translate(-50%, -50%)
+        rotateY(${-angleDiff}deg)
+        rotateX(${pitch + arrowTilt}deg)
+        translateZ(${Math.min(100, distance * 5)}px)
+        scale(${0.5 + Math.min(1, distance/20)})
+      `;
+      
+      // Visual feedback
+      if (distance < 3) {
+        arrowPart.style.background = 'linear-gradient(to bottom, #00ff00, #009900)';
+      } else {
+        arrowPart.style.background = 'linear-gradient(to bottom, #ff0000, #cc0000)';
+      }
+      
+      updateSensorInfo();
+    }
+    
+    // Map Drawing Functions
+    function drawMap() {
+      if (map.style.display !== 'block') return;
+      
+      ctx.clearRect(0, 0, map.width, map.height);
+      
+      // Draw grid
+      ctx.strokeStyle = '#eee';
+      for (let i = 0; i <= gridSize; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * scale, 0);
+        ctx.lineTo(i * scale, map.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, i * scale);
+        ctx.lineTo(map.width, i * scale);
+        ctx.stroke();
+      }
+      
+      // Draw trail
+      ctx.fillStyle = 'rgba(0, 0, 255, 0.3)';
+      trail.forEach(pos => {
+        ctx.beginPath();
+        ctx.arc(pos.x * scale + scale/2, pos.y * scale + scale/2, scale/3, 0, Math.PI*2);
+        ctx.fill();
+      });
+      
+      // Draw target
+      ctx.fillStyle = 'red';
+      ctx.fillRect(targetPosition.x * scale, targetPosition.y * scale, scale, scale);
+      
+      // Draw current position
+      ctx.fillStyle = 'blue';
+      ctx.beginPath();
+      ctx.arc(
+        currentPosition.x * scale + scale/2, 
+        currentPosition.y * scale + scale/2, 
+        scale/2, 0, Math.PI*2
+      );
+      ctx.fill();
+      
+      updateMapArrow();
+    }
+    
+    function updateMapArrow() {
+      if (map.style.display !== 'block') return;
+      
+      const dx = targetPosition.x - currentPosition.x;
+      const dy = targetPosition.y - currentPosition.y;
+      const targetAngle = Math.atan2(dx, dy) * (180 / Math.PI);
+      
+      const canvasRect = map.getBoundingClientRect();
+      const arrowX = canvasRect.left + (currentPosition.x * scale + scale/2) - 15;
+      const arrowY = canvasRect.top + (currentPosition.y * scale + scale/2) - 15;
+      
+      mapArrow.style.left = `${arrowX}px`;
+      mapArrow.style.top = `${arrowY}px`;
+      mapArrow.style.transform = `rotate(${targetAngle}deg)`;
+    }
+    
+    // Info Display
+    function updateSensorInfo() {
+      const dx = targetPosition.x - currentPosition.x;
+      const dy = targetPosition.y - currentPosition.y;
+      const distance = Math.sqrt(dx**2 + dy**2).toFixed(1);
+      const targetAngle = (Math.atan2(dx, dy) * 180/Math.PI + 360) % 360;
+      
+      let angleDiff = (targetAngle - heading + 360) % 360;
+      if (angleDiff > 180) angleDiff -= 360;
+      
+      document.getElementById('sensor-info').innerHTML = `
+        Steps: ${stepCount} | Distance: ${distance}m<br>
+        Heading: ${heading.toFixed(0)}° | Turn: ${angleDiff > 0 ? 'Right' : 'Left'} ${Math.abs(angleDiff).toFixed(0)}°
+      `;
+    }
+    
+    // Control Functions
+    function toggleView() {
+      const mapContainer = document.getElementById('map-container');
+      const toggleBtn = document.querySelector('.view-toggle');
+      
+      if (mapContainer.style.display === 'none' || !mapContainer.style.display) {
+        mapContainer.style.display = 'block';
+        toggleBtn.textContent = '👁️ Show AR';
+        drawMap();
+      } else {
+        mapContainer.style.display = 'none';
+        toggleBtn.textContent = '🗺️ Show Map';
+      }
+    }
+    
+    function resetTracker() {
+      currentPosition = { x: 0, y: 0 };
+      trail = [];
+      stepCount = 0;
+      updateArArrow();
+      drawMap();
+    }
+    
+    function setRandomTarget() {
+      targetPosition = {
+        x: Math.floor(Math.random() * gridSize),
+        y: Math.floor(Math.random() * gridSize)
+      };
+      updateArArrow();
+      drawMap();
+    }
+    
+    // Initialize
+    window.addEventListener('load', initApp);
+  </script>
 </body>
 </html>
