@@ -1,118 +1,127 @@
-v<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Step Tracker with 3D Arrow and Video</title>
+  <title>3D Arrow in Video Feed</title>
   <style>
     body {
       font-family: sans-serif;
       text-align: center;
-      padding: 2em;
       margin: 0;
+      padding: 0;
       overflow: hidden;
       background-color: #222;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
     }
 
     #video {
       width: 100%;
-      height: 100%;
+      height: 50%;
       object-fit: cover;
       display: block;
-      position: absolute;
-      top: 0;
-      left: 0;
+      position: relative;
     }
 
-    #arrow {
+    #controls {
+      background-color: #333;
+      color: white;
+      padding: 10px;
+      text-align: center;
+      flex: 1;
+    }
+
+    #arrow-container {
       position: absolute;
       top: 50%;
       left: 50%;
-      width: 60px;
-      height: 60px;
-      background-image: url('https://tse3.mm.bing.net/th?id=OIP.SuilJAyB1OaLXSQjKrq3vgHaHa&pid=Api&P=0&h=180');
-      background-size: contain;
-      background-repeat: no-repeat;
-      pointer-events: none;
+      width: 100px;
+      height: 100px;
       transform-origin: center;
       transform: translate(-50%, -50%);
-      transition: transform 0.1s ease;
+      pointer-events: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
 
     #arrow-head {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      width: 60px;
+      height: 60px;
+      background-color: transparent;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-bottom: 40px solid red;
       transform-origin: center;
-      pointer-events: none;
+      transition: transform 0.1s ease-in-out;
     }
 
-    #message {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
+    .direction-text {
       font-size: 18px;
-      color: white;
-      background-color: rgba(0, 0, 0, 0.5);
-      padding: 10px;
-      border-radius: 5px;
+      margin: 10px;
     }
 
     #sensor-info {
       color: white;
       font-size: 18px;
-      position: absolute;
-      bottom: 20px;
-      width: 100%;
-      text-align: center;
-      background-color: rgba(0, 0, 0, 0.5);
-      padding: 5px;
+      position: relative;
+      bottom: 10px;
     }
 
-    #toggle-button {
+    #map {
+      display: none;
+      width: 100%;
+      height: 50%;
+      background-color: #fff;
       position: absolute;
-      bottom: 10px;
-      right: 10px;
-      font-size: 16px;
+      top: 50%;
+      left: 0;
+    }
+
+    #toggle-button, #reset-button {
+      margin: 10px;
       padding: 10px;
-      background-color: #333;
+      font-size: 16px;
+      background-color: #444;
       color: white;
       border: none;
       border-radius: 5px;
       cursor: pointer;
     }
 
-    #map {
-      display: none;
-      width: 100%;
-      height: 100%;
-      background-color: #fff;
-      position: absolute;
-      top: 0;
-      left: 0;
+    #toggle-button {
+      background-color: #444;
+    }
+
+    #reset-button {
+      background-color: #d9534f;
+    }
+
+    .step-info {
+      font-size: 20px;
+      margin: 10px;
     }
   </style>
 </head>
 <body>
-  <h2>📍 Step Tracker with 3D Direction Arrow</h2>
-  <p>Move your phone to detect heading and steps!</p>
-
-  <div id="message">
-    <p>📸 Please open the rear camera to view the direction arrow in real-time.</p>
-  </div>
 
   <video id="video" autoplay></video>
 
-  <div id="arrow">
-    <div id="arrow-head"></div>
+  <div id="controls">
+    <div class="direction-text" id="direction">📍 Direction: Waiting for data...</div>
+    <div class="step-info" id="steps">Steps: 0</div>
+    <div class="direction-text" id="orientation">Orientation: Waiting for data...</div>
+    <button id="reset-button" onclick="resetStepCounter()">🔄 Reset Step Counter</button>
+    <button id="toggle-button" onclick="toggleView()">Show Map</button>
   </div>
 
   <div id="sensor-info">📍 Waiting for sensor data...</div>
 
-  <button id="toggle-button" onclick="toggleView()">Show Map</button>
+  <div id="arrow-container">
+    <div id="arrow-head"></div>
+  </div>
 
   <div id="map">
     <canvas id="map-canvas" width="640" height="640"></canvas>
@@ -120,34 +129,39 @@ v<!DOCTYPE html>
 
   <script>
     const video = document.getElementById('video');
-    const arrow = document.getElementById('arrow');
+    const arrowContainer = document.getElementById('arrow-container');
     const arrowHead = document.getElementById('arrow-head');
+    const directionText = document.getElementById('direction');
+    const stepsText = document.getElementById('steps');
+    const orientationText = document.getElementById('orientation');
     const sensorInfo = document.getElementById('sensor-info');
     const toggleButton = document.getElementById('toggle-button');
     const mapDiv = document.getElementById('map');
+    const resetButton = document.getElementById('reset-button');
 
-    let heading = 0;  // Heading in degrees
+    let heading = 0; // Heading in degrees
     let stepCount = 0;
     let lastStepTime = 0;
     let lastMagnitude = 0;
     const stepThreshold = 12.5;
     const minStepInterval = 400;
-    const alpha = 0.8;  // Low-pass filter for smooth acceleration data
+    const alpha = 0.8; // Low-pass filter for smooth acceleration data
 
     // Initialize video feed
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then(function(stream) {
+      .then(function (stream) {
         video.srcObject = stream;
       })
-      .catch(function(error) {
+      .catch(function (error) {
         console.error("Error accessing camera: ", error);
       });
 
-    // Update the position and orientation of the arrow's head in real-time
+    // Update the position and orientation of the 3D arrow
     function updateArrowPosition() {
       const rotationX = (heading - 90) * Math.PI / 180; // Convert to radians and adjust for screen coordinates
-      const transformValue = `rotate3d(0, 1, 0, ${rotationX}rad)`; // 3D rotation around Y-axis (vertical)
+      const transformValue = `rotateY(${rotationX}rad)`; // Rotate around Y-axis (vertical)
 
+      // Apply the rotation to the arrow
       arrowHead.style.transform = transformValue;  // Rotate only the head of the arrow
     }
 
@@ -155,6 +169,7 @@ v<!DOCTYPE html>
     window.addEventListener('deviceorientation', (event) => {
       heading = event.alpha || 0; // alpha gives us the heading in degrees
       updateArrowPosition();
+      updateDirection();
     });
 
     // Use device motion to detect steps (based on acceleration)
@@ -170,21 +185,38 @@ v<!DOCTYPE html>
       if (magnitude > stepThreshold && (now - lastStepTime > minStepInterval)) {
         stepCount++;
         lastStepTime = now;
-        sensorInfo.innerText = `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount}`;
+        stepsText.innerText = `Steps: ${stepCount}`;
       }
     });
 
-    // Show the message to user
-    function showMessage(message) {
-      document.getElementById('message').innerText = message;
+    // Update the direction text (East, West, etc.)
+    function updateDirection() {
+      let direction;
+      if (heading >= 337.5 || heading < 22.5) {
+        direction = "North";
+      } else if (heading >= 22.5 && heading < 67.5) {
+        direction = "North-East";
+      } else if (heading >= 67.5 && heading < 112.5) {
+        direction = "East";
+      } else if (heading >= 112.5 && heading < 157.5) {
+        direction = "South-East";
+      } else if (heading >= 157.5 && heading < 202.5) {
+        direction = "South";
+      } else if (heading >= 202.5 && heading < 247.5) {
+        direction = "South-West";
+      } else if (heading >= 247.5 && heading < 292.5) {
+        direction = "West";
+      } else if (heading >= 292.5 && heading < 337.5) {
+        direction = "North-West";
+      }
+      directionText.innerText = `📍 Direction: ${direction}`;
+      orientationText.innerText = `Orientation: ${heading.toFixed(2)}°`;
     }
 
-    // Show the map and arrow when ready
-    function showMapAndArrow() {
-      document.getElementById('message').style.display = 'none';
-      mapDiv.style.display = 'none';
-      video.style.display = 'block';
-      toggleButton.innerText = 'Show Map';
+    // Reset the step counter
+    function resetStepCounter() {
+      stepCount = 0;
+      stepsText.innerText = `Steps: 0`;
     }
 
     // Toggle between map and video feed
@@ -202,16 +234,17 @@ v<!DOCTYPE html>
 
     // Wait for the user to open the rear camera
     function onCameraReady() {
-      showMessage('📸 Rear camera is ready!');
-      showMapAndArrow();
+      sensorInfo.innerText = '📸 Rear camera is ready!';
+      video.style.display = 'block';
     }
 
     // Show instructions after camera access is granted
-    window.onload = function() {
+    window.onload = function () {
       setTimeout(() => {
         onCameraReady();
       }, 2000); // Simulate message delay until camera is ready
     };
   </script>
+
 </body>
 </html>
