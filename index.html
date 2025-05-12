@@ -1,210 +1,163 @@
-<!DOCTYPE html>
+v<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Step Tracker with Direction Arrow</title>
+  <title>Step Tracker with 3D Arrow and Video</title>
   <style>
     body {
       font-family: sans-serif;
       text-align: center;
       padding: 2em;
+      margin: 0;
+      overflow: hidden;
+      background-color: #222;
     }
 
-    canvas {
-      border: 1px solid #ccc;
-      margin-top: 20px;
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
       display: block;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    input,
-    button {
-      font-size: 16px;
-      padding: 8px 12px;
-      margin: 10px;
+      position: absolute;
+      top: 0;
+      left: 0;
     }
 
     #arrow {
       position: absolute;
-      width: 30px;
-      height: 30px;
+      top: 50%;
+      left: 50%;
+      width: 60px;
+      height: 60px;
       background-image: url('https://tse3.mm.bing.net/th?id=OIP.SuilJAyB1OaLXSQjKrq3vgHaHa&pid=Api&P=0&h=180');
-      background-size: cover;
+      background-size: contain;
       background-repeat: no-repeat;
       pointer-events: none;
       transform-origin: center;
+      transform: translate(-50%, -50%);
+      transition: transform 0.1s ease;
     }
 
-    #canvas-container {
-      position: relative;
-      display: inline-block;
-    }
-
-    #video {
-      width: 640px;
-      height: 480px;
-      display: block;
-      margin: 0 auto;
-    }
-
-    #map {
-      display: none; /* Initially hide the map */
-    }
-
-    #sensor-info {
-      margin-top: 10px;
+    #arrow-head {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      transform-origin: center;
+      pointer-events: none;
     }
 
     #message {
-      margin-top: 20px;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
       font-size: 18px;
-      color: #888;
+      color: white;
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    #sensor-info {
+      color: white;
+      font-size: 18px;
+      position: absolute;
+      bottom: 20px;
+      width: 100%;
+      text-align: center;
+      background-color: rgba(0, 0, 0, 0.5);
+      padding: 5px;
+    }
+
+    #toggle-button {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      font-size: 16px;
+      padding: 10px;
+      background-color: #333;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #map {
+      display: none;
+      width: 100%;
+      height: 100%;
+      background-color: #fff;
+      position: absolute;
+      top: 0;
+      left: 0;
     }
   </style>
 </head>
 <body>
-  <h2>📍 Step Tracker with Direction Arrow</h2>
+  <h2>📍 Step Tracker with 3D Direction Arrow</h2>
   <p>Move your phone to detect heading and steps!</p>
-  <h3 id="sensor-info">📍 Waiting for sensor data...</h3>
 
   <div id="message">
     <p>📸 Please open the rear camera to view the direction arrow in real-time.</p>
   </div>
 
-  <div id="canvas-container">
-    <video id="video" autoplay></video> <!-- Video feed element -->
-    <canvas id="map" width="640" height="480"></canvas> <!-- Map element (initially hidden) -->
-    <div id="arrow"></div> <!-- Arrow element -->
+  <video id="video" autoplay></video>
+
+  <div id="arrow">
+    <div id="arrow-head"></div>
   </div>
 
-  <button onclick="showMap()">🔄 Show Map & Arrow</button>
+  <div id="sensor-info">📍 Waiting for sensor data...</div>
+
+  <button id="toggle-button" onclick="toggleView()">Show Map</button>
+
+  <div id="map">
+    <canvas id="map-canvas" width="640" height="640"></canvas>
+  </div>
 
   <script>
-    const canvas = document.getElementById('map');
-    const ctx = canvas.getContext('2d');
-    const arrow = document.getElementById('arrow');
     const video = document.getElementById('video');
-    const scale = 10;
-    const gridSize = 64;
+    const arrow = document.getElementById('arrow');
+    const arrowHead = document.getElementById('arrow-head');
+    const sensorInfo = document.getElementById('sensor-info');
+    const toggleButton = document.getElementById('toggle-button');
+    const mapDiv = document.getElementById('map');
 
-    const target = { x: 20, y: 40 };
-    let current = { x: 0, y: 0 };
-    let trail = [];
+    let heading = 0;  // Heading in degrees
     let stepCount = 0;
-    let heading = 0;
-
-    const stepLength = 1.0;
-    const stepThreshold = 12.5;
-    const minStepInterval = 400;
-
     let lastStepTime = 0;
     let lastMagnitude = 0;
-    const alpha = 0.8; // Low-pass filter
+    const stepThreshold = 12.5;
+    const minStepInterval = 400;
+    const alpha = 0.8;  // Low-pass filter for smooth acceleration data
 
-    function drawGrid() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#eee';
-      for (let i = 0; i <= gridSize; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * scale, 0);
-        ctx.lineTo(i * scale, canvas.height);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(0, i * scale);
-        ctx.lineTo(canvas.width, i * scale);
-        ctx.stroke();
-      }
-    }
-
-    function drawPosition() {
-      drawGrid();
-
-      // Draw trail
-      ctx.fillStyle = 'rgba(0, 0, 255, 0.3)';
-      trail.forEach(pos => {
-        ctx.beginPath();
-        ctx.arc(pos.x * scale + scale / 2, pos.y * scale + scale / 2, scale / 4, 0, Math.PI * 2);
-        ctx.fill();
+    // Initialize video feed
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then(function(stream) {
+        video.srcObject = stream;
+      })
+      .catch(function(error) {
+        console.error("Error accessing camera: ", error);
       });
 
-      // Target (red square)
-      ctx.fillStyle = 'red';
-      ctx.fillRect(target.x * scale, target.y * scale, scale, scale);
+    // Update the position and orientation of the arrow's head in real-time
+    function updateArrowPosition() {
+      const rotationX = (heading - 90) * Math.PI / 180; // Convert to radians and adjust for screen coordinates
+      const transformValue = `rotate3d(0, 1, 0, ${rotationX}rad)`; // 3D rotation around Y-axis (vertical)
 
-      // Current Position (blue dot)
-      ctx.fillStyle = 'blue';
-      ctx.beginPath();
-      ctx.arc(current.x * scale + scale / 2, current.y * scale + scale / 2, scale / 2, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Calculate angle to target (for arrow direction)
-      const dx = target.x - current.x;
-      const dy = target.y - current.y;
-      const targetAngle = Math.atan2(dy, dx) * (180 / Math.PI); // [-180° to 180°]
-
-      // Update arrow position and rotation
-      updateArrow(targetAngle);
-
-      // Display stats
-      const dist = Math.sqrt(dx ** 2 + dy ** 2).toFixed(2);
-      document.getElementById('sensor-info').innerText =
-        `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount} | Distance to Target: ${dist} m | Turn: ${getTurnDirection(heading, targetAngle)}`;
+      arrowHead.style.transform = transformValue;  // Rotate only the head of the arrow
     }
 
-    // Update arrow direction and position
-    function updateArrow(targetAngle) {
-      const canvasRect = canvas.getBoundingClientRect();
-      const arrowSize = 30;
-
-      // Position arrow on current location (center of the blue dot)
-      const arrowX = canvasRect.left + (current.x * scale + scale / 2) - arrowSize / 2;
-      const arrowY = canvasRect.top + (current.y * scale + scale / 2) - arrowSize / 2;
-
-      arrow.style.left = `${arrowX}px`;
-      arrow.style.top = `${arrowY}px`;
-
-      // Rotate arrow to point toward target (adjust for screen coordinates)
-      const arrowRotation = targetAngle - 90; // Adjust because image points up by default
-      arrow.style.transform = `rotate(${arrowRotation}deg)`;
-    }
-
-    function getTurnDirection(userHeading, targetAngle) {
-      userHeading = (userHeading + 360) % 360;
-      targetAngle = (targetAngle + 360) % 360;
-
-      const diff = (targetAngle - userHeading + 360) % 360;
-      if (diff > 180) return "Left";
-      else if (diff < 180) return "Right";
-      else return "Forward";
-    }
-
-    function resetTracker() {
-      current = { x: 0, y: 0 };
-      trail = [];
-      stepCount = 0;
-      drawPosition();
-    }
-
-    function updatePosition() {
-      const rad = heading * Math.PI / 180;
-      current.x += stepLength * Math.cos(rad);
-      current.y += stepLength * Math.sin(rad);
-
-      current.x = Math.max(0, Math.min(gridSize - 1, current.x));
-      current.y = Math.max(0, Math.min(gridSize - 1, current.y));
-
-      trail.push({ ...current });
-      drawPosition();
-    }
-
+    // Use device orientation to get the heading
     window.addEventListener('deviceorientation', (event) => {
-      heading = event.alpha || 0; // 0°-360°
-      drawPosition();
+      heading = event.alpha || 0; // alpha gives us the heading in degrees
+      updateArrowPosition();
     });
 
+    // Use device motion to detect steps (based on acceleration)
     window.addEventListener('devicemotion', (event) => {
       const acc = event.accelerationIncludingGravity;
       if (!acc.x || !acc.y || !acc.z) return;
@@ -217,28 +170,48 @@
       if (magnitude > stepThreshold && (now - lastStepTime > minStepInterval)) {
         stepCount++;
         lastStepTime = now;
-        updatePosition();
+        sensorInfo.innerText = `📍 Heading: ${heading.toFixed(2)}° | Steps: ${stepCount}`;
       }
     });
 
-    // Initialize the camera feed
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then(function(stream) {
-        video.srcObject = stream;
-      })
-      .catch(function(error) {
-        console.error("Error accessing camera: ", error);
-      });
-
-    // Function to show the map and overlay arrow
-    function showMap() {
-      // Show the map (canvas) and hide the initial message
-      document.getElementById('map').style.display = 'block';
-      document.getElementById('message').style.display = 'none';
+    // Show the message to user
+    function showMessage(message) {
+      document.getElementById('message').innerText = message;
     }
 
-    // Initialize with map hidden
-    drawPosition();
+    // Show the map and arrow when ready
+    function showMapAndArrow() {
+      document.getElementById('message').style.display = 'none';
+      mapDiv.style.display = 'none';
+      video.style.display = 'block';
+      toggleButton.innerText = 'Show Map';
+    }
+
+    // Toggle between map and video feed
+    function toggleView() {
+      if (video.style.display === 'none') {
+        video.style.display = 'block';
+        mapDiv.style.display = 'none';
+        toggleButton.innerText = 'Show Map';
+      } else {
+        video.style.display = 'none';
+        mapDiv.style.display = 'block';
+        toggleButton.innerText = 'Show Video';
+      }
+    }
+
+    // Wait for the user to open the rear camera
+    function onCameraReady() {
+      showMessage('📸 Rear camera is ready!');
+      showMapAndArrow();
+    }
+
+    // Show instructions after camera access is granted
+    window.onload = function() {
+      setTimeout(() => {
+        onCameraReady();
+      }, 2000); // Simulate message delay until camera is ready
+    };
   </script>
 </body>
 </html>
