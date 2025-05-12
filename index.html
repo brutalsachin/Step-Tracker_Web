@@ -3,248 +3,255 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Arrow in Video Feed</title>
+  <title>AR Navigation with 3D Arrow</title>
   <style>
     body {
       font-family: sans-serif;
       text-align: center;
+      padding: 1em;
       margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background-color: #222;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
+      overflow-x: hidden;
+      background: #000;
+      color: white;
     }
-
+    
+    #ar-container {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      margin: 0 auto;
+      height: 70vh;
+      perspective: 1000px;
+    }
+    
     #video {
       width: 100%;
-      height: 50%;
+      height: 100%;
       object-fit: cover;
-      display: block;
-      position: relative;
+      transform: scaleX(-1); /* Mirror for rear camera */
     }
-
-    #controls {
-      background-color: #333;
-      color: white;
-      padding: 10px;
-      text-align: center;
-      flex: 1;
-    }
-
-    #arrow-container {
+    
+    #arrow-3d {
       position: absolute;
-      top: 50%;
+      width: 80px;
+      height: 120px;
       left: 50%;
-      width: 100px;
-      height: 100px;
-      transform-origin: center;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    #arrow-head {
-      width: 60px;
-      height: 60px;
-      background-color: transparent;
-      border-left: 10px solid transparent;
-      border-right: 10px solid transparent;
-      border-bottom: 40px solid red;
-      transform-origin: center;
-      transition: transform 0.1s ease-in-out;
-    }
-
-    .direction-text {
-      font-size: 18px;
-      margin: 10px;
-    }
-
-    #sensor-info {
-      color: white;
-      font-size: 18px;
-      position: relative;
-      bottom: 10px;
-    }
-
-    #map {
-      display: none;
-      width: 100%;
-      height: 50%;
-      background-color: #fff;
-      position: absolute;
       top: 50%;
-      left: 0;
+      transform-style: preserve-3d;
+      transform: translate(-50%, -50%);
+      transition: transform 0.3s ease-out;
     }
-
-    #toggle-button, #reset-button {
-      margin: 10px;
-      padding: 10px;
-      font-size: 16px;
-      background-color: #444;
+    
+    .arrow-part {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom, #ff0000, #cc0000);
+      clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+      opacity: 0.9;
+      border-radius: 10px;
+      transform-origin: bottom center;
+    }
+    
+    .arrow-shadow {
+      position: absolute;
+      width: 60px;
+      height: 20px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 50%;
+      bottom: -10px;
+      left: 50%;
+      transform: translateX(-50%) rotateX(90deg);
+      filter: blur(5px);
+    }
+    
+    #controls {
+      margin: 20px auto;
+      padding: 15px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 10px;
+      max-width: 500px;
+    }
+    
+    button {
+      background: #4285f4;
       color: white;
       border: none;
-      border-radius: 5px;
+      padding: 10px 20px;
+      margin: 5px;
+      border-radius: 20px;
+      font-size: 16px;
       cursor: pointer;
     }
-
-    #toggle-button {
-      background-color: #444;
-    }
-
-    #reset-button {
-      background-color: #d9534f;
-    }
-
-    .step-info {
-      font-size: 20px;
-      margin: 10px;
+    
+    #sensor-info {
+      margin: 15px 0;
+      font-size: 16px;
+      background: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 10px;
     }
   </style>
 </head>
 <body>
-
-  <video id="video" autoplay></video>
-
+  <h2>AR 3D Navigation Guide</h2>
+  
+  <div id="ar-container">
+    <video id="video" autoplay playsinline></video>
+    <div id="arrow-3d">
+      <div class="arrow-part"></div>
+      <div class="arrow-shadow"></div>
+    </div>
+  </div>
+  
   <div id="controls">
-    <div class="direction-text" id="direction">📍 Direction: Waiting for data...</div>
-    <div class="step-info" id="steps">Steps: 0</div>
-    <div class="direction-text" id="orientation">Orientation: Waiting for data...</div>
-    <button id="reset-button" onclick="resetStepCounter()">🔄 Reset Step Counter</button>
-    <button id="toggle-button" onclick="toggleView()">Show Map</button>
-  </div>
-
-  <div id="sensor-info">📍 Waiting for sensor data...</div>
-
-  <div id="arrow-container">
-    <div id="arrow-head"></div>
-  </div>
-
-  <div id="map">
-    <canvas id="map-canvas" width="640" height="640"></canvas>
+    <div id="sensor-info">Initializing sensors...</div>
+    <button onclick="resetPosition()">Reset Position</button>
+    <button onclick="setRandomTarget()">New Target</button>
   </div>
 
   <script>
+    // AR Elements
     const video = document.getElementById('video');
-    const arrowContainer = document.getElementById('arrow-container');
-    const arrowHead = document.getElementById('arrow-head');
-    const directionText = document.getElementById('direction');
-    const stepsText = document.getElementById('steps');
-    const orientationText = document.getElementById('orientation');
-    const sensorInfo = document.getElementById('sensor-info');
-    const toggleButton = document.getElementById('toggle-button');
-    const mapDiv = document.getElementById('map');
-    const resetButton = document.getElementById('reset-button');
-
-    let heading = 0; // Heading in degrees
+    const arrow3d = document.getElementById('arrow-3d');
+    const arrowPart = document.querySelector('.arrow-part');
+    
+    // Navigation variables
+    let currentPosition = { x: 0, y: 0, z: 0 };
+    let targetPosition = { x: 15, y: 0, z: 20 }; // Default target 20m ahead
+    let heading = 0; // Compass heading (degrees)
+    let pitch = 0;   // Device tilt (degrees)
+    
+    // Step detection
     let stepCount = 0;
+    const stepLength = 0.7; // meters per step
     let lastStepTime = 0;
-    let lastMagnitude = 0;
-    const stepThreshold = 12.5;
-    const minStepInterval = 400;
-    const alpha = 0.8; // Low-pass filter for smooth acceleration data
-
-    // Initialize video feed
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then(function (stream) {
+    
+    // Initialize AR
+    function initAR() {
+      // Start camera
+      navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      }).then(stream => {
         video.srcObject = stream;
-      })
-      .catch(function (error) {
-        console.error("Error accessing camera: ", error);
+      }).catch(err => {
+        alert("Camera access required for AR mode: " + err.message);
       });
-
-    // Update the position and orientation of the 3D arrow
-    function updateArrowPosition() {
-      const rotationX = (heading - 90) * Math.PI / 180; // Convert to radians and adjust for screen coordinates
-      const transformValue = `rotateY(${rotationX}rad)`; // Rotate around Y-axis (vertical)
-
-      // Apply the rotation to the arrow
-      arrowHead.style.transform = transformValue;  // Rotate only the head of the arrow
+      
+      // Start sensors
+      if (window.DeviceOrientationEvent) {
+        window.addEventListener('deviceorientation', handleOrientation);
+      } else {
+        alert("Device orientation not supported");
+      }
+      
+      if (window.DeviceMotionEvent) {
+        window.addEventListener('devicemotion', handleMotion);
+      }
+      
+      // Initial update
+      updateArrow();
     }
-
-    // Use device orientation to get the heading
-    window.addEventListener('deviceorientation', (event) => {
-      heading = event.alpha || 0; // alpha gives us the heading in degrees
-      updateArrowPosition();
-      updateDirection();
-    });
-
-    // Use device motion to detect steps (based on acceleration)
-    window.addEventListener('devicemotion', (event) => {
+    
+    // Handle device orientation (compass + tilt)
+    function handleOrientation(event) {
+      if (event.alpha !== null) heading = event.alpha; // Compass heading (0-360)
+      if (event.beta !== null) pitch = event.beta;     // Front/back tilt (-180 to 180)
+      
+      // Convert to useful ranges
+      heading = (heading + 360) % 360;
+      pitch = Math.max(-90, Math.min(90, pitch));
+      
+      updateArrow();
+    }
+    
+    // Handle step detection
+    function handleMotion(event) {
       const acc = event.accelerationIncludingGravity;
-      if (!acc.x || !acc.y || !acc.z) return;
-
-      const rawMagnitude = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
-      const magnitude = alpha * lastMagnitude + (1 - alpha) * rawMagnitude;
-      lastMagnitude = magnitude;
-
+      if (!acc) return;
+      
+      // Calculate magnitude with low-pass filter
+      const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
       const now = Date.now();
-      if (magnitude > stepThreshold && (now - lastStepTime > minStepInterval)) {
+      
+      // Step detection (simplified)
+      if (magnitude > 15 && now - lastStepTime > 500) {
         stepCount++;
         lastStepTime = now;
-        stepsText.innerText = `Steps: ${stepCount}`;
+        
+        // Move forward in current heading direction
+        const rad = (heading * Math.PI) / 180;
+        currentPosition.x += Math.sin(rad) * stepLength;
+        currentPosition.z += Math.cos(rad) * stepLength;
+        
+        updateArrow();
       }
-    });
-
-    // Update the direction text (East, West, etc.)
-    function updateDirection() {
-      let direction;
-      if (heading >= 337.5 || heading < 22.5) {
-        direction = "North";
-      } else if (heading >= 22.5 && heading < 67.5) {
-        direction = "North-East";
-      } else if (heading >= 67.5 && heading < 112.5) {
-        direction = "East";
-      } else if (heading >= 112.5 && heading < 157.5) {
-        direction = "South-East";
-      } else if (heading >= 157.5 && heading < 202.5) {
-        direction = "South";
-      } else if (heading >= 202.5 && heading < 247.5) {
-        direction = "South-West";
-      } else if (heading >= 247.5 && heading < 292.5) {
-        direction = "West";
-      } else if (heading >= 292.5 && heading < 337.5) {
-        direction = "North-West";
-      }
-      directionText.innerText = `📍 Direction: ${direction}`;
-      orientationText.innerText = `Orientation: ${heading.toFixed(2)}°`;
     }
-
-    // Reset the step counter
-    function resetStepCounter() {
-      stepCount = 0;
-      stepsText.innerText = `Steps: 0`;
-    }
-
-    // Toggle between map and video feed
-    function toggleView() {
-      if (video.style.display === 'none') {
-        video.style.display = 'block';
-        mapDiv.style.display = 'none';
-        toggleButton.innerText = 'Show Map';
+    
+    // Update 3D arrow position and rotation
+    function updateArrow() {
+      // Calculate direction to target
+      const dx = targetPosition.x - currentPosition.x;
+      const dz = targetPosition.z - currentPosition.z;
+      
+      // Distance to target
+      const distance = Math.sqrt(dx**2 + dz**2);
+      
+      // Angle to target (compass bearing)
+      const targetAngle = (Math.atan2(dx, dz) * 180/Math.PI + 360) % 360;
+      
+      // Relative angle between heading and target
+      let angleDiff = (targetAngle - heading + 360) % 360;
+      if (angleDiff > 180) angleDiff -= 360;
+      
+      // Calculate arrow tilt based on distance
+      const arrowTilt = Math.min(30, (1/distance) * 500); // Tilt down when close
+      
+      // 3D Transform
+      arrow3d.style.transform = `
+        translate(-50%, -50%)
+        rotateY(${angleDiff}deg)
+        rotateX(${pitch + arrowTilt}deg)
+        translateZ(${Math.min(100, distance * 5)}px)
+        scale(${0.5 + Math.min(1, distance/20)})
+      `;
+      
+      // Update info display
+      document.getElementById('sensor-info').innerHTML = `
+        Steps: ${stepCount} | Distance: ${distance.toFixed(1)}m<br>
+        Heading: ${heading.toFixed(0)}° | Target: ${angleDiff.toFixed(0)}° ${angleDiff > 0 ? 'Right' : 'Left'}
+      `;
+      
+      // Visual feedback when close
+      if (distance < 3) {
+        arrowPart.style.background = 'linear-gradient(to bottom, #00ff00, #009900)';
       } else {
-        video.style.display = 'none';
-        mapDiv.style.display = 'block';
-        toggleButton.innerText = 'Show Video';
+        arrowPart.style.background = 'linear-gradient(to bottom, #ff0000, #cc0000)';
       }
     }
-
-    // Wait for the user to open the rear camera
-    function onCameraReady() {
-      sensorInfo.innerText = '📸 Rear camera is ready!';
-      video.style.display = 'block';
+    
+    // Control functions
+    function resetPosition() {
+      currentPosition = { x: 0, y: 0, z: 0 };
+      stepCount = 0;
+      updateArrow();
     }
-
-    // Show instructions after camera access is granted
-    window.onload = function () {
-      setTimeout(() => {
-        onCameraReady();
-      }, 2000); // Simulate message delay until camera is ready
-    };
+    
+    function setRandomTarget() {
+      targetPosition = {
+        x: (Math.random() * 30 - 15),
+        y: 0,
+        z: 10 + Math.random() * 20
+      };
+      updateArrow();
+    }
+    
+    // Initialize on load
+    window.addEventListener('load', initAR);
   </script>
-
 </body>
 </html>
