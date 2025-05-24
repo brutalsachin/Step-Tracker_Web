@@ -6,43 +6,49 @@
     <title>AR Step Tracker with 3D Navigation</title>
     <style>
         body {
-            font-family: 'Inter', sans-serif; /* Using Inter font */
+            font-family: 'Inter', sans-serif;
             text-align: center;
             padding: 1em;
             margin: 0;
             overflow-x: hidden;
-            background: #1a1a2e; /* Darker background */
-            color: #e0e0e0; /* Lighter text color */
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            transition: background 0.5s ease, color 0.5s ease;
+        }
+
+        body.ar-mode {
+            background: #0f0f1a;
+            color: #ffffff;
         }
 
         h2 {
-            color: #e0e0e0;
+            color: inherit;
             margin-bottom: 20px;
         }
         
-        /* AR View Styles */
         #ar-container {
             position: relative;
             width: 100%;
-            max-width: 800px; /* Max width for larger screens */
+            max-width: 800px;
             margin: 0 auto;
             height: 60vh;
-            border-radius: 15px; /* Rounded corners */
+            border-radius: 15px;
             overflow: hidden;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3); /* Subtle shadow */
-            background-color: #000; /* Fallback background */
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            background-color: #000;
+            display: none;
         }
         
         #video {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transform: scaleX(-1); /* Mirror camera feed */
+            transform: scaleX(-1);
             display: block;
         }
         
@@ -52,27 +58,26 @@
             left: 0;
             width: 100%;
             height: 100%;
-            pointer-events: none; /* Allows clicks to pass through to video */
+            pointer-events: none;
             z-index: 10;
         }
         
-        /* Map View Styles */
         #map-container {
-            display: none; /* Hidden by default */
             position: relative;
             margin: 20px auto;
             width: 100%;
-            max-width: 640px; /* Match canvas width */
+            max-width: 640px;
             border-radius: 15px;
             overflow: hidden;
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            display: block;
         }
         
         #map {
             border: 1px solid #333;
             display: block;
             margin: 0 auto;
-            background: #282844; /* Darker map background */
+            background: #282844;
             border-radius: 10px;
         }
         
@@ -80,42 +85,40 @@
             position: absolute;
             width: 30px;
             height: 30px;
-            /* Using inline SVG for a crisp arrow */
             background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%234CAF50" d="M12 2L4 12l8 10 8-10z"/></svg>');
             background-size: contain;
             pointer-events: none;
             transform-origin: center;
-            transition: transform 0.1s ease-out; /* Smooth map arrow movement */
+            transition: transform 0.1s ease-out;
         }
         
-        /* Control Styles */
         #controls {
             margin: 20px auto;
             padding: 20px;
-            background: rgba(40, 40, 68, 0.8); /* Slightly transparent dark background */
-            border-radius: 15px; /* Rounded corners */
+            background: rgba(40, 40, 68, 0.8);
+            border-radius: 15px;
             max-width: 500px;
-            width: 90%; /* Responsive width */
+            width: 90%;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
-            gap: 10px; /* Spacing between buttons */
+            gap: 10px;
         }
         
         button {
-            background: linear-gradient(145deg, #6a0572, #8a0572); /* Gradient button */
+            background: linear-gradient(145deg, #6a0572, #8a0572);
             color: white;
             border: none;
             padding: 12px 25px;
-            margin: 0; /* Managed by gap in flexbox */
-            border-radius: 25px; /* More rounded */
+            margin: 0;
+            border-radius: 25px;
             font-size: 17px;
             cursor: pointer;
-            transition: all 0.3s ease; /* Smooth transitions for hover/active */
+            transition: all 0.3s ease;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            flex-grow: 1; /* Allow buttons to grow */
-            min-width: 120px; /* Minimum width for buttons */
+            flex-grow: 1;
+            min-width: 120px;
         }
         
         button:hover {
@@ -129,34 +132,90 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
         
-        .view-toggle {
-            background: linear-gradient(145deg, #ff9800, #e68900); /* Orange gradient */
+        .switch-view-btn {
+            background: linear-gradient(145deg, #ff9800, #e68900);
         }
 
-        .view-toggle:hover {
+        .switch-view-btn:hover {
             background: linear-gradient(145deg, #e68900, #ff9800);
+        }
+
+        .raw-data-toggle {
+            background: linear-gradient(145deg, #007bff, #0056b3);
+        }
+
+        .raw-data-toggle:hover {
+            background: linear-gradient(145deg, #0056b3, #007bff);
+        }
+
+        #threshold-control {
+            width: 100%;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            color: #c0c0c0;
+        }
+
+        #threshold-control label {
+            font-size: 0.9em;
+        }
+
+        #threshold-control input[type="range"] {
+            width: 80%;
+            -webkit-appearance: none;
+            height: 8px;
+            background: #555;
+            border-radius: 5px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+
+        #threshold-control input[type="range"]:hover {
+            opacity: 1;
+        }
+
+        #threshold-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #00ffff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+        }
+
+        #threshold-control input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #00ffff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
         }
         
         #sensor-info {
             margin: 15px 0;
             font-size: 17px;
-            background: rgba(60, 60, 90, 0.7); /* Slightly lighter background */
+            background: rgba(60, 60, 90, 0.7);
             padding: 12px;
             border-radius: 10px;
-            width: 100%; /* Full width within controls */
-            box-sizing: border-box; /* Include padding in width */
+            width: 100%;
+            box-sizing: border-box;
             line-height: 1.5;
             color: #c0c0c0;
-            text-align: left; /* Align sensor data to left */
+            text-align: left;
         }
 
-        /* Responsive adjustments */
         @media (max-width: 768px) {
             #ar-container {
                 height: 50vh;
             }
             #controls {
-                flex-direction: column; /* Stack buttons on small screens */
+                flex-direction: column;
                 padding: 15px;
             }
             button {
@@ -172,164 +231,162 @@
     
     <div id="ar-container">
         <video id="video" autoplay playsinline></video>
-        <canvas id="three-canvas"></canvas> 
+        <canvas id="three-canvas"></canvas>    
     </div>
     
     <div id="map-container">
-        <canvas id="map" width="640" height="480"></canvas>
-        <div id="map-arrow"></div>
+        <canvas id="map" width="640" height="640"></canvas> <div id="map-arrow"></div>
     </div>
     
     <div id="controls">
         <div id="sensor-info">Initializing sensors...</div>
-        <button class="view-toggle" onclick="toggleView()">🗺️ Show Map</button>
+        <button class="switch-view-btn" onclick="switchView()">👁️ Switch to AR</button>
+        <button class="raw-data-toggle" onclick="toggleRawData()">📊 Toggle Raw Data</button>
         <button onclick="resetTracker()">🔄 Reset Position</button>
         <button onclick="setRandomTarget()">🎯 New Target</button>
+
+        <div id="threshold-control" style="display: none;"> <label for="stepThresholdSlider">Step Threshold: <span id="thresholdValue">5.0</span></label>
+            <input type="range" id="stepThresholdSlider" min="1.0" max="10.0" step="0.1" value="5.0">
+        </div>
     </div>
 
     <script>
-        // DOM Elements
         const video = document.getElementById('video');
         const map = document.getElementById('map');
         const ctx = map.getContext('2d');
         const mapArrow = document.getElementById('map-arrow');
         const threeCanvas = document.getElementById('three-canvas');
         const sensorInfoDiv = document.getElementById('sensor-info');
+        const arContainer = document.getElementById('ar-container');
+        const mapContainer = document.getElementById('map-container');
+        const switchViewBtn = document.querySelector('.switch-view-btn');
+        const thresholdControl = document.getElementById('threshold-control');
+        const stepThresholdSlider = document.getElementById('stepThresholdSlider');
+        const thresholdValueSpan = document.getElementById('thresholdValue');
         
-        // Three.js Variables
         let scene, camera, renderer, arrowMesh;
-        
-        // Tracking Variables
-        const scale = 10; // Scale for map grid
-        const gridSize = 64; // Size of the virtual grid
-        let targetPosition = { x: 20, y: 40 }; // Grid coordinates
+        let arInitialized = false;
+
+        const scale = 10;
+        const gridSize = 64;
+        let targetPosition = { x: 20, y: 40 };
         let currentPosition = { x: 0, y: 0 };
         let trail = [];
         let stepCount = 0;
         
-        // Sensor Data (Current values)
-        let heading = 0; // Alpha: Z-axis (compass heading)
-        let pitch = 0;   // Beta: X-axis (front-back tilt)
-        let roll = 0;    // Gamma: Y-axis (side-to-side tilt)
-        let accX = 0, accY = 0, accZ = 0; // Acceleration including gravity
-        let rotRateX = 0, rotRateY = 0, rotRateZ = 0; // Gyroscope rotational rates
-        let magX = 0, magY = 0, magZ = 0; // Raw Magnetometer data
-        let pressure = 0; // Barometer pressure data
+        let heading = 0;
+        let pitch = 0;
+        let roll = 0;
+        let accX = 0, accY = 0, accZ = 0;
+        let rotRateX = 0, rotRateY = 0, rotRateZ = 0;
+        let magX = 0, magY = 0, magZ = 0;
+        let pressure = 0;
         
-        // Step Detection
-        const stepLength = 1.0; // Meters per step (approximate)
-        const stepThreshold = 1.5; // Acceleration magnitude threshold for a step (tuned for realism)
-        const minStepInterval = 400; // Minimum time between steps in ms
+        let stepThreshold = 5.0;
+        const stepLength = 1.0;
+        const minStepInterval = 400;
         let lastStepTime = 0;
         let lastMagnitude = 0;
-        const alphaFilter = 0.8; // Low-pass filter coefficient for acceleration
+        const alphaFilter = 0.8;
         
-        // Initialize App
+        let showRawData = false;
+
+        class KalmanFilter {
+            constructor(Q, R) {
+                this.Q = Q;
+                this.R = R;
+                this.x_hat = 0;
+                this.P = 1;
+            }
+
+            predict() {
+                this.P = this.P + this.Q;
+            }
+
+            update(measurement) {
+                const K = this.P / (this.P + this.R);
+                this.x_hat = this.x_hat + K * (measurement - this.x_hat);
+                this.P = (1 - K) * this.P;
+                return this.x_hat;
+            }
+        }
+        const kalmanFilter = new KalmanFilter(0.01, 0.1);
+
         function initApp() {
             console.log("initApp: Starting initialization.");
-            // Start camera
-            initCamera();
             
-            // Initialize Three.js scene
-            initThreeJs();
-            
-            // Start sensors
+            stepThresholdSlider.value = stepThreshold;
+            thresholdValueSpan.textContent = stepThreshold.toFixed(1);
+
+            stepThresholdSlider.addEventListener('input', (event) => {
+                stepThreshold = parseFloat(event.target.value);
+                thresholdValueSpan.textContent = stepThreshold.toFixed(1);
+            });
+
             if (window.DeviceOrientationEvent) {
                 window.addEventListener('deviceorientation', handleOrientation);
-                console.log("DeviceOrientationEvent listener added (fused orientation).");
             } else {
-                console.warn("DeviceOrientationEvent not supported.");
                 sensorInfoDiv.textContent = "Orientation sensor (fused) not supported.";
             }
             
             if (window.DeviceMotionEvent) {
                 window.addEventListener('devicemotion', handleMotion);
-                console.log("DeviceMotionEvent listener added (fused motion).");
             } else {
-                console.warn("DeviceMotionEvent not supported.");
                 sensorInfoDiv.textContent = "Motion sensor (fused) not supported.";
             }
 
-            // Attempt to use Generic Sensor API for raw data (Magnetometer, Barometer)
             initGenericSensors();
             
-            // Draw initial map
             drawMap();
             
-            // Set initial random target
             setRandomTarget();
-            console.log("initApp: Initialization complete.");
         }
 
-        // Initialize Generic Sensors (Magnetometer, Barometer)
         function initGenericSensors() {
-            // Magnetometer
             if ('Magnetometer' in window) {
                 try {
-                    const magnetometer = new Magnetometer({ frequency: 10 }); // 10 Hz updates
+                    const magnetometer = new Magnetometer({ frequency: 10 });
                     magnetometer.addEventListener('reading', () => {
                         magX = magnetometer.x;
                         magY = magnetometer.y;
                         magZ = magnetometer.z;
-                        updateSensorInfo(); // Update display with raw data
+                        updateSensorInfo();
                     });
                     magnetometer.addEventListener('error', event => {
-                        if (event.error.name === 'NotAllowedError') {
-                            console.warn('Permission to access raw Magnetometer was denied. Ensure HTTPS and grant permission.');
-                            document.getElementById('raw-mag-status').textContent = "Permission denied or HTTPS required.";
-                        } else {
-                            console.error('Magnetometer error:', event.error);
-                            document.getElementById('raw-mag-status').textContent = `Error: ${event.error.name}`;
-                        }
+                        console.error('Magnetometer error:', event.error);
                     });
                     magnetometer.start();
-                    console.log("Raw Magnetometer sensor started.");
-                    document.getElementById('raw-mag-status').textContent = "Active";
                 } catch (error) {
                     console.error('Magnetometer API failed to start:', error);
-                    document.getElementById('raw-mag-status').textContent = `API failed: ${error.name}`;
                 }
             } else {
-                console.warn("Raw Magnetometer API not supported by this browser.");
-                document.getElementById('raw-mag-status').textContent = "Not supported";
             }
 
-            // Barometer
             if ('Barometer' in window) {
                 try {
-                    const barometer = new Barometer({ frequency: 1 }); // 1 Hz updates
+                    const barometer = new Barometer({ frequency: 1 });
                     barometer.addEventListener('reading', () => {
                         pressure = barometer.pressure;
-                        updateSensorInfo(); // Update display with raw data
+                        updateSensorInfo();
                     });
                     barometer.addEventListener('error', event => {
-                        if (event.error.name === 'NotAllowedError') {
-                            console.warn('Permission to access Barometer was denied. Ensure HTTPS and grant permission.');
-                            document.getElementById('raw-baro-status').textContent = "Permission denied or HTTPS required.";
-                        } else {
-                            console.error('Barometer error:', event.error);
-                            document.getElementById('raw-baro-status').textContent = `Error: ${event.error.name}`;
-                        }
+                        console.error('Barometer error:', event.error);
                     });
                     barometer.start();
-                    console.log("Raw Barometer sensor started.");
-                    document.getElementById('raw-baro-status').textContent = "Active";
                 } catch (error) {
                     console.error('Barometer API failed to start:', error);
-                    document.getElementById('raw-baro-status').textContent = `API failed: ${error.name}`;
                 }
             } else {
-                console.warn("Raw Barometer API not supported by this browser.");
-                document.getElementById('raw-baro-status').textContent = "Not supported";
             }
         }
         
-        // Camera Initialization
         function initCamera() {
+            if (arInitialized) return;
+
             sensorInfoDiv.textContent = "Requesting camera access...";
             navigator.mediaDevices.getUserMedia({ 
                 video: { 
-                    facingMode: 'environment', // Prefer rear camera
+                    facingMode: 'environment',
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
                 }
@@ -339,7 +396,6 @@
                     video.play();
                     video.muted = true;
                     video.loop = true;
-                    console.log("Camera stream started successfully.");
                     sensorInfoDiv.textContent = "Camera ready. Initializing sensors...";
                 };
             }).catch(err => {
@@ -348,161 +404,141 @@
             });
         }
         
-        // Three.js Initialization
         function initThreeJs() {
-            console.log("initThreeJs: Initializing Three.js.");
-            // Scene
+            if (arInitialized) {
+                return;
+            }
             scene = new THREE.Scene();
             
-            // Camera
-            const arContainer = document.getElementById('ar-container');
             const initialWidth = arContainer.clientWidth;
             const initialHeight = arContainer.clientHeight;
 
             camera = new THREE.PerspectiveCamera(75, initialWidth / initialHeight, 0.1, 1000);
-            camera.position.set(0, 0, 5); // Position camera slightly back
-            camera.lookAt(0, 0, 0); // Look at the origin
+            camera.position.set(0, 0, 5);
+            camera.lookAt(0, 0, 0);
             
-            // Renderer
             renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, alpha: true, antialias: true });
-            renderer.setSize(initialWidth, initialHeight); // Set initial size based on container
+            renderer.setSize(initialWidth, initialHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setClearColor(0x000000, 0); // Transparent background
+            renderer.setClearColor(0x000000, 0);
             
-            // Lighting (for ambient glow and subtle highlights if material allows)
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); // Soft white light
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
             scene.add(ambientLight);
             
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5); // Directional light for shadows/highlights
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
             directionalLight.position.set(0, 1, 1).normalize();
             scene.add(directionalLight);
             
-            // Create the 3D Arrow Mesh with a custom shape
             const arrowShape = new THREE.Shape();
             
-            // Define points for a sleek arrow shape (similar to the image)
-            // Starting from bottom center, going clockwise
-            arrowShape.moveTo(0, -1.0); // Bottom center
-            arrowShape.lineTo(0.3, -1.0); // Bottom right corner
-            arrowShape.lineTo(0.3, 0.5);  // Right side of shaft
-            arrowShape.lineTo(0.8, 0.5);  // Right side of arrowhead base
-            arrowShape.lineTo(0, 1.5);    // Top point of arrowhead
-            arrowShape.lineTo(-0.8, 0.5); // Left side of arrowhead base
-            arrowShape.lineTo(-0.3, 0.5); // Left side of shaft
-            arrowShape.lineTo(-0.3, -1.0); // Bottom left corner
-            arrowShape.lineTo(0, -1.0);   // Close the path
+            arrowShape.moveTo(0, -1.0);
+            arrowShape.lineTo(0.3, -1.0);
+            arrowShape.lineTo(0.3, 0.5);
+            arrowShape.lineTo(0.8, 0.5);
+            arrowShape.lineTo(0, 1.5);
+            arrowShape.lineTo(-0.8, 0.5);
+            arrowShape.lineTo(-0.3, 0.5);
+            arrowShape.lineTo(-0.3, -1.0);
+            arrowShape.lineTo(0, -1.0);
             
-            // Extrude the shape to give it a slight thickness
             const extrudeSettings = {
                 steps: 1,
-                depth: 0.1, // Very thin, like a flat panel
-                bevelEnabled: false // No bevel for a sharp, modern look
+                depth: 0.5,
+                bevelEnabled: false
             };
             const arrowGeometry = new THREE.ExtrudeGeometry(arrowShape, extrudeSettings);
             
-            // Center the geometry's pivot point
             arrowGeometry.center();
 
-            // Create a material with emissive properties for the glowing effect
             const arrowMaterial = new THREE.MeshStandardMaterial({
-                color: 0xff0000, // Base color (will be blended)
-                emissive: 0xff0000, // Emissive color (makes it glow)
-                emissiveIntensity: 1.0, // Increased glow intensity
-                roughness: 0.3, // Less rough for a smoother look
-                metalness: 0.1, // Slight metallic sheen
-                transparent: true, // Enable transparency
-                opacity: 0.9 // Slight transparency for a modern glass-like feel
+                color: 0x00ffff,
+                emissive: 0x00ffff,
+                emissiveIntensity: 1.5,
+                roughness: 0.3,
+                metalness: 0.1,
+                transparent: true,
+                opacity: 0.6
             });
             
             arrowMesh = new THREE.Mesh(arrowGeometry, arrowMaterial);
             
-            // Initial rotation for arrow to face the camera (along negative Z-axis)
-            arrowMesh.rotation.x = -Math.PI / 2; // Makes the arrow point along positive Z
-            arrowMesh.rotation.y = Math.PI; // Rotates it 180 degrees to point along negative Z (towards camera)
+            arrowMesh.rotation.x = -Math.PI / 2;
+            arrowMesh.rotation.y = Math.PI; 
             
-            // Initial scale and position to ensure visibility
-            arrowMesh.scale.set(2.0, 2.0, 2.0); // Significantly larger initial scale
-            arrowMesh.position.set(0, 0, -5); // Position it very close to the camera (camera is at Z=5, looking at 0,0,0)
+            arrowMesh.scale.set(2.0, 2.0, 2.0);
+            arrowMesh.position.set(0, 0, -5);
             
             scene.add(arrowMesh);
-            console.log("initThreeJs: Arrow mesh created and added to scene.");
             
-            // Handle window resize
             window.addEventListener('resize', onWindowResize);
-            // Call onWindowResize immediately to set correct aspect ratio and size
-            onWindowResize(); 
+            onWindowResize();    
             
-            // Start the animation loop
             animate();
-            console.log("initThreeJs: Three.js animation loop started.");
+            arInitialized = true;
         }
         
-        // Three.js Animation Loop
         function animate() {
             requestAnimationFrame(animate);
-            renderer.render(scene, camera);
+            if (arContainer.style.display === 'block' && renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
         }
         
-        // Handle window resize for Three.js canvas
         function onWindowResize() {
+            if (!arInitialized) return;
             const arContainer = document.getElementById('ar-container');
             const width = arContainer.clientWidth;
             const height = arContainer.clientHeight;
             
             if (width === 0 || height === 0) {
-                console.warn("AR container has zero dimensions on resize, skipping Three.js update.");
                 return;
             }
 
             camera.aspect = width / height;
             camera.updateProjectionMatrix();
             renderer.setSize(width, height);
-            console.log(`Three.js Renderer resized to: ${width}x${height}`);
         }
         
-        // Sensor Handlers
         function handleOrientation(event) {
             heading = event.alpha || 0;
             pitch = event.beta || 0;
-            roll = event.gamma || 0; // Capture roll (gamma)
+            roll = event.gamma || 0;
             
             heading = (heading + 360) % 360;
             pitch = Math.max(-90, Math.min(90, pitch));
-            roll = Math.max(-90, Math.min(90, roll)); // Clamp roll as well
+            roll = Math.max(-90, Math.min(90, roll));
             
-            updateArArrow(arrowMesh, currentPosition, targetPosition, heading, pitch, roll); // Pass pitch and roll
+            if (arContainer.style.display === 'block') {
+                updateArArrow(arrowMesh, currentPosition, targetPosition, heading, pitch, roll); 
+            }
             updateMapArrow();
-            updateSensorInfo(); // Update info on orientation changes too
+            updateSensorInfo();
         }
         
         function handleMotion(event) {
             const acc = event.accelerationIncludingGravity;
-            const rotRate = event.rotationRate; // Get gyroscope data
+            const rotRate = event.rotationRate;
 
             if (!acc || acc.x === null || acc.y === null || acc.z === null) {
                 return;
             }
-            // Store raw acceleration data
             accX = acc.x;
             accY = acc.y;
             accZ = acc.z;
 
-            // Store raw gyroscope data
             if (rotRate) {
-                // DeviceMotionEvent.rotationRate provides alpha, beta, gamma for rotational velocity
-                // These typically correspond to Z, X, Y axes respectively.
-                rotRateX = rotRate.alpha || 0; 
-                rotRateY = rotRate.beta || 0;  
-                rotRateZ = rotRate.gamma || 0; 
+                rotRateX = rotRate.alpha || 0;    
+                rotRateY = rotRate.beta || 0;    
+                rotRateZ = rotRate.gamma || 0;    
             } else {
-                rotRateX = rotRateY = rotRateZ = 0; // Set to 0 if not available
+                rotRateX = rotRateY = rotRateZ = 0;
             }
             
-            const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
+            const rawMagnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
             
-            const filteredMagnitude = alphaFilter * lastMagnitude + (1 - alphaFilter) * magnitude;
-            lastMagnitude = filteredMagnitude;
-            
+            kalmanFilter.predict();
+            const filteredMagnitude = kalmanFilter.update(rawMagnitude);
+
             const now = Date.now();
             if (filteredMagnitude > stepThreshold && (now - lastStepTime > minStepInterval)) {
                 stepCount++;
@@ -516,100 +552,69 @@
                 currentPosition.y = Math.max(0, Math.min(gridSize - 1, currentPosition.y));
                 
                 trail.push({ ...currentPosition });
-                updateArArrow(arrowMesh, currentPosition, targetPosition, heading, pitch, roll); // Pass pitch and roll
+                if (arContainer.style.display === 'block') {
+                    updateArArrow(arrowMesh, currentPosition, targetPosition, heading, pitch, roll); 
+                }
                 drawMap();
             }
-            updateSensorInfo(); // Always update info on motion too, for raw data
+            updateSensorInfo();
         }
         
-        // --- UPDATED updateArArrow FUNCTION ---
         function updateArArrow(arrowMesh, currentPosition, targetPosition, currentHeading, currentPitch, currentRoll) {
             if (!arrowMesh) {
-                console.warn("Arrow mesh not initialized, cannot update AR arrow.");
                 return;
             }
             
-            // 1. Calculate direction vector from current to target
             const dx = targetPosition.x - currentPosition.x;
             const dy = targetPosition.y - currentPosition.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            const targetAngleRad = Math.atan2(dx, dy); 
-            const targetAngleDeg = (targetAngleRad * 180 / Math.PI + 360) % 360; 
+            const targetAngleRad = Math.atan2(dx, dy);    
+            const targetAngleDeg = (targetAngleRad * 180 / Math.PI + 360) % 360;    
 
-            // 2. Calculate angle difference between target direction and user's heading
             let angleDiff = (targetAngleDeg - currentHeading + 360) % 360;
-            if (angleDiff > 180) angleDiff -= 360; // Normalize to -180 to +180
+            if (angleDiff > 180) angleDiff -= 360;
 
-            // 3. Set arrow rotation based on phone orientation
-            // Y-axis rotation (Yaw): Horizontal turning towards target
-            // Base rotation (Math.PI) makes arrow face camera (negative Z).
-            // Then add angleDiff to turn left/right relative to camera's view.
-            arrowMesh.rotation.y = Math.PI + (angleDiff * Math.PI / 180); 
+            arrowMesh.rotation.y = Math.PI + (angleDiff * Math.PI / 180);    
             
-            // X-axis rotation (Pitch): Vertical tilt of the phone
-            // currentPitch is positive when tilting up. We want arrow to point down when looking up.
-            // Initial arrow geometry points along positive Z (after -PI/2 X rotation).
-            // So, positive pitch (looking up) means arrow should rotate negatively around its X-axis.
-            const xRotation = -currentPitch * Math.PI / 180; 
-            arrowMesh.rotation.x = xRotation - Math.PI / 2; // Combine with initial geometry rotation
+            arrowMesh.rotation.x = -Math.PI / 2;
             
-            // Z-axis rotation (Roll): Side-to-side tilt of the phone
-            // currentRoll is positive when tilting right. We want arrow to tilt right.
-            // Three.js positive Z rotation is counter-clockwise. So, negative roll for clockwise tilt.
-            arrowMesh.rotation.z = -currentRoll * Math.PI / 180; 
+            arrowMesh.rotation.z = 0;
 
-            // 4. Set arrow position (relative to camera, for example)
-            // Dynamic Height (Y-axis): Arrow appears to move up/down in the view based on pitch
-            // If looking up (positive pitch), arrow should appear lower (smaller Y).
-            // If looking down (negative pitch), arrow should appear higher (larger Y).
-            const baseArrowHeight = 1.5; // Default height above ground (in Three.js units)
-            // Adjust Y position based on pitch. Max pitch +/-90 degrees.
-            // Normalize pitch to -1 to 1 range, then scale it.
-            const pitchAdjust = (currentPitch / 90) * 2; // Adjust factor for how much it moves vertically
-            arrowMesh.position.y = baseArrowHeight - pitchAdjust;
+            const baseArrowHeight = 0;
+            arrowMesh.position.y = baseArrowHeight;
 
-            // Dynamic Depth (Z-axis): Arrow appears closer/further based on distance
-            // Use a non-linear scaling for a more natural feel (e.g., quadratic easing)
-            const normalizedDistance = Math.min(1, distance / 70); // Normalize distance over a larger range (e.g., up to 70m)
-            const minArrowZ = -10; // Closest to camera (more negative means closer)
-            const maxArrowZ = 5;  // Furthest from camera (more positive means further)
-            // Quadratic easing: starts slow, accelerates
-            const arrowZ = minArrowZ + (normalizedDistance * normalizedDistance) * (maxArrowZ - minArrowZ); 
+            const normalizedDistance = Math.min(1, distance / 70);
+            const minArrowZ = -10;
+            const maxArrowZ = 5;
+            const arrowZ = minArrowZ + (normalizedDistance * normalizedDistance) * (maxArrowZ - minArrowZ);    
             arrowMesh.position.z = arrowZ;
             
-            // X-position (horizontal offset): Keep centered for now, but could be adjusted for target offset
-            arrowMesh.position.x = 0; 
+            arrowMesh.position.x = 0;    
             
-            // 5. Adjust scale based on distance
-            // Arrow appears smaller when far, larger when close.
-            const minScale = 0.2; // Minimum scale when very far
-            const maxScale = 3.5; // Significantly increased maximum scale
-            // Scale factor now uses normalizedDistance for smoother transition
+            const minScale = 0.2;
+            const maxScale = 3.5;
             const scaleFactor = minScale + (1 - normalizedDistance) * (maxScale - minScale);
             arrowMesh.scale.set(scaleFactor, scaleFactor, scaleFactor);
             
-            // Update arrow color and emissive properties based on proximity to target
-            const targetColor = new THREE.Color(0x00ff00); // Green when close
-            const initialColor = new THREE.Color(0xff0000); // Red when far
+            const targetColor = new THREE.Color(0x00ff00);
+            const initialColor = new THREE.Color(0x00ffff);
             
             if (distance < 5) {
                 const blendFactor = 1 - (distance / 5);
                 arrowMesh.material.color.lerpColors(initialColor, targetColor, blendFactor);
                 arrowMesh.material.emissive.lerpColors(initialColor, targetColor, blendFactor);
-                arrowMesh.material.emissiveIntensity = 1.0 + (1 - blendFactor) * 1.0; // More intense glow when very close
+                arrowMesh.material.emissiveIntensity = 1.5 + (1 - blendFactor) * 1.0;
             } else {
                 arrowMesh.material.color.copy(initialColor);
                 arrowMesh.material.emissive.copy(initialColor);
-                arrowMesh.material.emissiveIntensity = 1.0;
+                arrowMesh.material.emissiveIntensity = 1.5;
             }
             
             updateSensorInfo();
         }
-        // --- END UPDATED updateArArrow FUNCTION ---
         
-        // Map Drawing Functions
         function drawMap() {
-            if (map.style.display !== 'block') return;
+            if (mapContainer.style.display !== 'block') return;
             
             ctx.clearRect(0, 0, map.width, map.height);
             
@@ -629,7 +634,7 @@
             ctx.fillStyle = 'rgba(0, 150, 255, 0.5)';
             trail.forEach(pos => {
                 ctx.beginPath();
-                ctx.arc(pos.x * scale + scale/2, pos.y * scale + scale/2, scale/3, 0, Math.PI*2);
+                ctx.arc(pos.x * scale + scale/2, pos.y * scale + scale/2, scale/4, 0, Math.PI*2);
                 ctx.fill();
             });
             
@@ -639,8 +644,8 @@
             ctx.fillStyle = '#4CAF50';
             ctx.beginPath();
             ctx.arc(
-                currentPosition.x * scale + scale/2, 
-                currentPosition.y * scale + scale/2, 
+                currentPosition.x * scale + scale/2,    
+                currentPosition.y * scale + scale/2,    
                 scale/2, 0, Math.PI*2
             );
             ctx.fill();
@@ -649,7 +654,7 @@
         }
         
         function updateMapArrow() {
-            if (map.style.display !== 'block') return;
+            if (mapContainer.style.display !== 'block') return;
             
             const dx = targetPosition.x - currentPosition.x;
             const dy = targetPosition.y - currentPosition.y;
@@ -665,7 +670,6 @@
             mapArrow.style.transform = `rotate(${targetAngle}deg)`;
         }
         
-        // Info Display
         function updateSensorInfo() {
             const dx = targetPosition.x - currentPosition.x;
             const dy = targetPosition.y - currentPosition.y;
@@ -678,55 +682,95 @@
             let turnDirection = angleDiff > 0 ? 'Right' : 'Left';
             if (Math.abs(angleDiff) < 5) turnDirection = 'Straight';
             
-            sensorInfoDiv.innerHTML = `
+            let sensorInfoHtml = `
                 Steps: ${stepCount} | Distance: ${distance}m<br>
                 Heading: ${heading.toFixed(0)}° | Turn: ${turnDirection} ${Math.abs(angleDiff).toFixed(0)}°<br>
-                Pitch: ${pitch.toFixed(0)}° | Roll: ${roll.toFixed(0)}°<br>
-                <hr style="border-color: #444; margin: 8px 0;">
-                <span style="color: #a0d9f0;">-- Raw Sensor Data --</span><br>
-                Acc (Incl. Gravity):<br>
-                &nbsp;&nbsp;X: ${accX.toFixed(2)}m/s²<br>
-                &nbsp;&nbsp;Y: ${accY.toFixed(2)}m/s²<br>
-                &nbsp;&nbsp;Z: ${accZ.toFixed(2)}m/s²<br>
-                Gyro (Rot. Rate):<br>
-                &nbsp;&nbsp;X: ${rotRateX.toFixed(2)}°/s<br>
-                &nbsp;&nbsp;Y: ${rotRateY.toFixed(2)}°/s<br>
-                &nbsp;&nbsp;Z: ${rotRateZ.toFixed(2)}°/s<br>
-                Magnetometer (Raw):<br>
-                &nbsp;&nbsp;X: ${magX.toFixed(2)}μT<br>
-                &nbsp;&nbsp;Y: ${magY.toFixed(2)}μT<br>
-                &nbsp;&nbsp;Z: ${magZ.toFixed(2)}μT<br>
-                &nbsp;&nbsp;Status: <span id="raw-mag-status">Initializing...</span><br>
-                Barometer (Raw):<br>
-                &nbsp;&nbsp;Pressure: ${pressure.toFixed(2)}hPa<br>
-                &nbsp;&nbsp;Status: <span id="raw-baro-status">Initializing...</span><br>
-                <span style="font-size: 0.9em; color: #888;">(Raw sensor access requires HTTPS and user permission)</span>
             `;
+
+            if (showRawData) {
+                sensorInfoHtml += `
+                    <hr style="border-color: #444; margin: 8px 0;">
+                    <span style="color: #a0d9f0;">-- Raw Sensor Data --</span><br>
+                    Pitch: ${pitch.toFixed(0)}° | Roll: ${roll.toFixed(0)}°<br>
+                    Acc (Incl. Gravity):<br>
+                    &nbsp;&nbsp;X: ${accX.toFixed(2)}m/s²<br>
+                    &nbsp;&nbsp;Y: ${accY.toFixed(2)}m/s²<br>
+                    &nbsp;&nbsp;Z: ${accZ.toFixed(2)}m/s²<br>
+                    Gyro (Rot. Rate):<br>
+                    &nbsp;&nbsp;X: ${rotRateX.toFixed(2)}°/s<br>
+                    &nbsp;&nbsp;Y: ${rotRateY.toFixed(2)}°/s<br>
+                    &nbsp;&nbsp;Z: ${rotRateZ.toFixed(2)}°/s<br>
+                    Magnetometer (Raw):<br>
+                    &nbsp;&nbsp;X: ${magX.toFixed(2)}μT<br>
+                    &nbsp;&nbsp;Y: ${magY.toFixed(2)}μT<br>
+                    &nbsp;&nbsp;Z: ${magZ.toFixed(2)}μT<br>
+                    &nbsp;&nbsp;Status: <span id="raw-mag-status-display"></span><br>
+                    Barometer (Raw):<br>
+                    &nbsp;&nbsp;Pressure: ${pressure.toFixed(2)}hPa<br>
+                    &nbsp;&nbsp;Status: <span id="raw-baro-status-display"></span><br>
+                    <span style="font-size: 0.9em; color: #888;">(Raw sensor access requires HTTPS and user permission)</span>
+                `;
+            }
+            sensorInfoDiv.innerHTML = sensorInfoHtml;
+
+            if (showRawData) {
+                const magStatusSpan = document.getElementById('raw-mag-status-display');
+                if (magStatusSpan) {
+                    if ('Magnetometer' in window) {
+                        magStatusSpan.textContent = "Active"; 
+                    } else {
+                        magStatusSpan.textContent = "Not supported";
+                    }
+                }
+                const baroStatusSpan = document.getElementById('raw-baro-status-display');
+                if (baroStatusSpan) {
+                    if ('Barometer' in window) {
+                        baroStatusSpan.textContent = "Active"; 
+                    } else {
+                        baroStatusSpan.textContent = "Not supported";
+                    }
+                }
+            }
         }
         
-        // Control Functions
-        function toggleView() {
-            const mapContainer = document.getElementById('map-container');
-            const arContainer = document.getElementById('ar-container');
-            const toggleBtn = document.querySelector('.view-toggle');
-            
-            if (mapContainer.style.display === 'none' || !mapContainer.style.display) {
-                mapContainer.style.display = 'block';
-                arContainer.style.display = 'none';
-                toggleBtn.textContent = '👁️ Show AR';
-                drawMap();
-            } else {
+        function switchView() {
+            if (mapContainer.style.display === 'block') {
+                document.body.classList.add('ar-mode');
                 mapContainer.style.display = 'none';
                 arContainer.style.display = 'block';
-                toggleBtn.textContent = '🗺️ Show Map';
+                switchViewBtn.textContent = '🗺️ Switch to Map';
+                thresholdControl.style.display = 'flex';
+                if (!arInitialized) {
+                    initCamera();
+                    initThreeJs();
+                }
+                updateArArrow(arrowMesh, currentPosition, targetPosition, heading, pitch, roll);
+            } else {
+                document.body.classList.remove('ar-mode');
+                mapContainer.style.display = 'block';
+                arContainer.style.display = 'none';
+                switchViewBtn.textContent = '👁️ Switch to AR';
+                thresholdControl.style.display = 'none';
+                drawMap();
             }
+            updateSensorInfo();
+        }
+
+        function toggleRawData() {
+            showRawData = !showRawData;
+            updateSensorInfo();
         }
         
         function resetTracker() {
             currentPosition = { x: 0, y: 0 };
             trail = [];
             stepCount = 0;
-            updateArArrow(arrowMesh, currentPosition, targetPosition, heading, pitch, roll); 
+            kalmanFilter.x_hat = 0;
+            kalmanFilter.P = 1;
+
+            if (arContainer.style.display === 'block') {
+                updateArArrow(arrowMesh, currentPosition, targetPosition, heading, pitch, roll);    
+            }
             drawMap();
             updateSensorInfo();
         }
@@ -736,12 +780,13 @@
                 x: Math.floor(Math.random() * gridSize),
                 y: Math.floor(Math.random() * gridSize)
             };
-            updateArArrow(arrowMesh, currentPosition, targetPosition, heading, pitch, roll); 
+            if (arContainer.style.display === 'block') {
+                updateArArrow(arrowMesh, currentPosition, targetPosition, heading, pitch, roll);    
+            }
             drawMap();
             updateSensorInfo();
         }
         
-        // Initialize on window load
         window.addEventListener('load', initApp);
     </script>
 </body>
